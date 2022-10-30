@@ -1,6 +1,5 @@
-use indexmap::IndexSet;
 use rand::Rng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const VACANT: bool = false;
 const OCCUPIED: bool = true;
@@ -68,9 +67,9 @@ impl Board {
         }
     }
 
-    pub fn place_stone(&mut self, square_string: &String) -> Option<(usize, usize)> {
+    pub fn place_stone(&mut self, square_string: &String) -> Result<(), ()> {
         if square_string.len() < 2 {
-            return None;
+            return Ok(());
         }
         let row_string = (square_string[1..]).to_string();
         let col_string = (square_string[0..1]).to_string();
@@ -82,57 +81,76 @@ impl Board {
             let col_index = col_index.unwrap();
             let index = self.row_col_to_flat_index(*row_index, *col_index);
 
-            // Cannot place a stone on an occupied square
-            if self.black_stones[index] == OCCUPIED || self.white_stones[index] == OCCUPIED {
-                return None;
-            }
+            self.place_stone_at_index(index)?;
 
-            // Place stone
-            match self.turn {
-                Player::Black => {
-                    self.black_stones[index] = OCCUPIED;
-                }
-                Player::White => {
-                    self.white_stones[index] = OCCUPIED;
-                }
-            }
-
-            // Check for an outcome
-            // If no winner nor draw, switch the turn.
-            self.outcome = self.check_outcome(index);
-            if self.outcome.is_none() {
-                match self.turn {
-                    Player::Black => self.turn = Player::White,
-                    Player::White => self.turn = Player::Black,
-                }
-
-                self.half_move_count += 1;
-            }
-
-            Some((*row_index, *col_index))
+            return Ok(());
         } else {
-            None
+            return Err(());
         }
     }
 
-    pub fn place_stone_at_random(&mut self) -> Option<(usize, usize)> {
-        let legal_moves = self.legal_moves();
-        let square_string_index = rand::thread_rng().gen_range(0..legal_moves.len());
-        let random_square_string = legal_moves.get_index(square_string_index).unwrap();
-        // println!("Chosen move: {random_square_string}");
-        self.place_stone(&random_square_string)
+    fn place_stone_at_index(&mut self, index: usize) -> Result<(), ()> {
+        // Cannot place a stone on an occupied square
+        if self.black_stones[index] == OCCUPIED || self.white_stones[index] == OCCUPIED {
+            return Err(());
+        }
+
+        // Place stone
+        match self.turn {
+            Player::Black => {
+                self.black_stones[index] = OCCUPIED;
+            }
+            Player::White => {
+                self.white_stones[index] = OCCUPIED;
+            }
+        }
+
+        // Check for an outcome
+        // If no winner nor draw, switch the turn.
+        self.outcome = self.check_outcome(index);
+        if self.outcome.is_none() {
+            match self.turn {
+                Player::Black => self.turn = Player::White,
+                Player::White => self.turn = Player::Black,
+            }
+
+            self.half_move_count += 1;
+        }
+
+        Ok(())
     }
 
-    pub fn legal_moves(&self) -> IndexSet<String> {
-        let mut legal_moves_hashset = IndexSet::new();
+    pub fn place_stone_at_random(&mut self) -> Result<(), ()> {
+        let legal_moves_indices = self.legal_moves_indices();
+        let random_index = rand::thread_rng().gen_range(0..legal_moves_indices.len());
+        let random_square_index = legal_moves_indices[random_index];
+
+        self.place_stone_at_index(random_square_index)
+    }
+
+    pub fn legal_moves_indices(&self) -> Vec<usize> {
+        let mut legal_moves_indices = vec![];
         for row_index in 0..self.size {
             for col_index in 0..self.size {
                 let index = self.row_col_to_flat_index(row_index, col_index);
                 if (self.black_stones[index] && self.white_stones[index]) == VACANT {
-                    let legal_move = self.col_names[col_index].clone() + &self.row_names[row_index];
-                    legal_moves_hashset.insert(legal_move);
+                    legal_moves_indices.push(index);
                 }
             }
+        }
+
+        legal_moves_indices
+    }
+
+    pub fn legal_moves(&self) -> HashSet<String> {
+        let legal_moves_indices: Vec<usize> = self.legal_moves_indices();
+        let mut legal_moves_hashset: HashSet<String> =
+            HashSet::with_capacity(legal_moves_indices.len());
+
+        for i in legal_moves_indices.iter() {
+            let (row_index, col_index) = self.flat_index_to_row_col(*i);
+            let legal_move = self.col_names[col_index].clone() + &self.row_names[row_index];
+            legal_moves_hashset.insert(legal_move);
         }
         legal_moves_hashset
     }
@@ -212,6 +230,24 @@ impl Board {
         let row_index = row_index + self.base_board_padding();
         let col_index = col_index + self.base_board_padding();
         row_index * self.base_board_size() + col_index
+    }
+
+    fn flat_index_to_row_col(&self, index: usize) -> (usize, usize) {
+        let row_index = index / self.base_board_size();
+        let col_index = index % self.base_board_size();
+
+        (
+            row_index - self.base_board_padding(),
+            col_index - self.base_board_padding(),
+        )
+    }
+
+    pub fn reset(&mut self) {
+        self.black_stones.fill(VACANT);
+        self.white_stones.fill(VACANT);
+        self.turn = Player::Black;
+        self.outcome = None;
+        self.half_move_count = 0;
     }
 
     pub fn show(&self) {

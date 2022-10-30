@@ -25,7 +25,7 @@ pub fn play_game() {
                 .expect("Failed to read line");
             square_string = square_string.trim().to_string();
 
-            if board.place_stone(&square_string).is_some() {
+            if let Ok(()) = board.place_stone(&square_string) {
                 break;
             } else {
                 println!("{square_string} is not a valid move.");
@@ -36,16 +36,16 @@ pub fn play_game() {
 }
 
 pub fn play_random_game() {
-    let mut outcomes = vec![];
+    // let mut outcomes = vec![];
+    let mut board = Board::new(15, 5);
     let now = Instant::now();
     for _ in 0..100 {
-        let mut board = Board::new(15, 5);
-
+        board.reset();
         while !board.is_game_over() {
             board.place_stone_at_random();
         }
 
-        outcomes.push(board.outcome);
+        // outcomes.push(board.outcome);
     }
 
     let elapsed_s = now.elapsed().as_secs_f32();
