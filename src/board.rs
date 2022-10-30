@@ -6,8 +6,8 @@ const OCCUPIED: bool = true;
 
 #[derive(Copy, Clone)]
 pub enum Player {
-    Black = 0,
-    White = 1,
+    Black,
+    White,
 }
 
 pub enum Outcome {
