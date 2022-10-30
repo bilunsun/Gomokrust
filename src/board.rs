@@ -1,3 +1,4 @@
+use indexmap::IndexSet;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 
@@ -10,6 +11,7 @@ pub enum Player {
     White,
 }
 
+#[derive(Copy, Clone)]
 pub enum Outcome {
     Winner(Player),
     Draw,
@@ -26,13 +28,15 @@ pub struct Board {
     pub row_names_hashmap: HashMap<String, usize>,
     pub col_names_hashmap: HashMap<String, usize>,
     pub outcome: Option<Outcome>,
-    pub half_move_count: usize,
+    pub num_stones_placed: usize,
+    legal_moves_indices_hashset: IndexSet<usize>,
 }
 
 impl Board {
     pub fn new(size: usize, n_in_a_row: usize) -> Self {
         assert!(size <= 26, "The maximum supported board size is 26.");
-        assert!(n_in_a_row <= size, "n_in_a_row cannot be larger than size");
+        assert!(n_in_a_row <= size, "n_in_a_row cannot be larger than size.");
+        assert!(n_in_a_row > 1, "n_in_a_row must be at least 2.");
 
         let _base_board_size = size + (n_in_a_row - 1) * 2;
         let black_stones = vec![VACANT; _base_board_size * _base_board_size];
@@ -52,7 +56,9 @@ impl Board {
             col_names_hashmap.insert(n.clone(), i);
         }
 
-        Self {
+        let legal_moves_indices_hashset: IndexSet<usize> = IndexSet::with_capacity(size * size);
+
+        let mut board = Self {
             size,
             n_in_a_row,
             black_stones,
@@ -61,10 +67,15 @@ impl Board {
             col_names,
             row_names_hashmap,
             col_names_hashmap,
+            legal_moves_indices_hashset,
             turn: Player::Black,
             outcome: None,
-            half_move_count: 0,
-        }
+            num_stones_placed: 0,
+        };
+
+        board.initialize_legal_moves_indexset();
+
+        board
     }
 
     pub fn place_stone(&mut self, square_string: &String) -> Result<(), ()> {
@@ -82,11 +93,10 @@ impl Board {
             let index = self.row_col_to_flat_index(*row_index, *col_index);
 
             self.place_stone_at_index(index)?;
-
             return Ok(());
-        } else {
-            return Err(());
         }
+
+        return Err(());
     }
 
     fn place_stone_at_index(&mut self, index: usize) -> Result<(), ()> {
@@ -104,6 +114,7 @@ impl Board {
                 self.white_stones[index] = OCCUPIED;
             }
         }
+        self.legal_moves_indices_hashset.remove(&index);
 
         // Check for an outcome
         // If no winner nor draw, switch the turn.
@@ -114,40 +125,27 @@ impl Board {
                 Player::White => self.turn = Player::Black,
             }
 
-            self.half_move_count += 1;
+            self.num_stones_placed += 1;
         }
 
         Ok(())
     }
 
     pub fn place_stone_at_random(&mut self) -> Result<(), ()> {
-        let legal_moves_indices = self.legal_moves_indices();
-        let random_index = rand::thread_rng().gen_range(0..legal_moves_indices.len());
-        let random_square_index = legal_moves_indices[random_index];
+        let random_index = rand::thread_rng().gen_range(0..self.legal_moves_indices_hashset.len());
+        let random_square_index = self
+            .legal_moves_indices_hashset
+            .get_index(random_index)
+            .unwrap();
 
-        self.place_stone_at_index(random_square_index)
-    }
-
-    pub fn legal_moves_indices(&self) -> Vec<usize> {
-        let mut legal_moves_indices = vec![];
-        for row_index in 0..self.size {
-            for col_index in 0..self.size {
-                let index = self.row_col_to_flat_index(row_index, col_index);
-                if (self.black_stones[index] && self.white_stones[index]) == VACANT {
-                    legal_moves_indices.push(index);
-                }
-            }
-        }
-
-        legal_moves_indices
+        self.place_stone_at_index(*random_square_index)
     }
 
     pub fn legal_moves(&self) -> HashSet<String> {
-        let legal_moves_indices: Vec<usize> = self.legal_moves_indices();
         let mut legal_moves_hashset: HashSet<String> =
-            HashSet::with_capacity(legal_moves_indices.len());
+            HashSet::with_capacity(self.legal_moves_indices_hashset.len());
 
-        for i in legal_moves_indices.iter() {
+        for i in self.legal_moves_indices_hashset.iter() {
             let (row_index, col_index) = self.flat_index_to_row_col(*i);
             let legal_move = self.col_names[col_index].clone() + &self.row_names[row_index];
             legal_moves_hashset.insert(legal_move);
@@ -194,7 +192,7 @@ impl Board {
             return Some(Outcome::Winner(self.turn));
         }
 
-        if self.half_move_count == self.size * self.size {
+        if self.num_stones_placed == self.size * self.size {
             return Some(Outcome::Draw);
         }
 
@@ -247,7 +245,18 @@ impl Board {
         self.white_stones.fill(VACANT);
         self.turn = Player::Black;
         self.outcome = None;
-        self.half_move_count = 0;
+        self.num_stones_placed = 0;
+        self.initialize_legal_moves_indexset();
+    }
+
+    fn initialize_legal_moves_indexset(&mut self) {
+        self.legal_moves_indices_hashset.clear();
+        for row_index in 0..self.size {
+            for col_index in 0..self.size {
+                let index = self.row_col_to_flat_index(row_index, col_index);
+                self.legal_moves_indices_hashset.insert(index);
+            }
+        }
     }
 
     pub fn show(&self) {
@@ -287,48 +296,4 @@ impl Board {
 
         println!("{board_string}");
     }
-
-    // pub fn show_debug(&self) {
-    //     let mut board_string = String::new();
-    //     let mut padded_row_names: Vec<String> = self
-    //         .row_names
-    //         .iter()
-    //         .map(|n| {
-    //             let mut padded_name = String::from(if n.len() == 1 { " " } else { "" });
-    //             padded_name.push_str(n);
-    //             padded_name
-    //         })
-    //         .collect();
-
-    //     let base_board_row_pad_names = (0..self.n_in_a_row)
-    //         .collect::Vec<usize>()
-    //         .iter()
-    //         .map(|| String::from(". "))
-    //         .collect();
-    //     padded_row_names.append(base_board_row_pad_names);
-
-    //     for row_index in (0..self.size).rev() {
-    //         let mut row_string = padded_row_names[row_index].clone();
-    //         row_string.push_str(" ");
-
-    //         for col_index in 0..self.size {
-    //             let index = self.row_col_to_flat_index(row_index, col_index);
-
-    //             if self.black_stones[index] {
-    //                 row_string.push_str("X ");
-    //             } else if self.white_stones[index] {
-    //                 row_string.push_str("O ");
-    //             } else {
-    //                 row_string.push_str(". ");
-    //             }
-    //         }
-    //         board_string.push_str(&row_string);
-    //         board_string.push_str("\n");
-    //     }
-
-    //     board_string.push_str("   ");
-    //     board_string.push_str(&self.col_names.join(" "));
-
-    //     println!("{board_string}");
-    // }
 }
