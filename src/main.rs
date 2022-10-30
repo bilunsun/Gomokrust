@@ -1,7 +1,8 @@
 mod board;
 use crate::board::Board;
 
+mod game;
+
 fn main() {
-    let mut board = Board::new(15);
-    board.show();
+    game::play_game();
 }
