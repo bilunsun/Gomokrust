@@ -39,9 +39,10 @@ pub fn play_random_game() {
 }
 
 pub fn benchmark() {
+    let n_games = 10_000;
     let mut board = Board::new(15, 5);
     let now = Instant::now();
-    for _ in 0..100 {
+    for _ in 0..n_games {
         board.reset();
         while !board.is_game_over() {
             board
@@ -51,7 +52,10 @@ pub fn benchmark() {
     }
 
     let elapsed_s = now.elapsed().as_secs_f32();
-    println!("Games per second: {}", 100.0 / elapsed_s)
+    println!(
+        "Games per second: {}",
+        (n_games as f32 / elapsed_s) as usize
+    );
 }
 
 pub fn check_stats() {

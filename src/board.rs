@@ -2,13 +2,16 @@ use indexmap::IndexSet;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 
-const VACANT: bool = false;
-const OCCUPIED: bool = true;
-
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Player {
     Black,
     White,
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub enum Square {
+    Occupied(Player),
+    Vacant,
 }
 
 #[derive(Copy, Clone)]
@@ -21,15 +24,14 @@ pub struct Board {
     pub size: usize,
     pub n_in_a_row: usize,
     pub turn: Player,
-    pub black_stones: Vec<bool>,
-    pub white_stones: Vec<bool>,
+    pub squares: Vec<Square>,
     pub row_names: Vec<String>,
     pub col_names: Vec<String>,
     pub row_names_hashmap: HashMap<String, usize>,
     pub col_names_hashmap: HashMap<String, usize>,
     pub outcome: Option<Outcome>,
     pub num_stones_placed: usize,
-    legal_moves_indices_hashset: IndexSet<usize>,
+    legal_moves_indices_indexset: IndexSet<usize>,
     flat_index_to_check_indices: HashMap<usize, Vec<Vec<usize>>>,
 }
 
@@ -40,36 +42,24 @@ impl Board {
         assert!(n_in_a_row > 1, "n_in_a_row must be at least 2.");
 
         let _base_board_size = size + (n_in_a_row - 1) * 2;
-        let black_stones = vec![VACANT; _base_board_size * _base_board_size];
-        let white_stones = vec![VACANT; _base_board_size * _base_board_size];
-        let row_names: Vec<String> = (1..=size as u32).map(|c| c.to_string()).collect();
-        let col_names: Vec<String> = (b'A'..=b'Z')
-            .filter(|c| c - b'A' < size as u8)
-            .map(|c| (c as char).to_string())
-            .collect();
+        let squares = vec![Square::Vacant; _base_board_size * _base_board_size];
 
-        let mut row_names_hashmap = HashMap::new();
-        for (i, n) in row_names.iter().enumerate() {
-            row_names_hashmap.insert(n.clone(), i);
-        }
-        let mut col_names_hashmap = HashMap::new();
-        for (i, n) in col_names.iter().enumerate() {
-            col_names_hashmap.insert(n.clone(), i);
-        }
-
-        let legal_moves_indices_hashset: IndexSet<usize> = IndexSet::with_capacity(size * size);
+        let row_names = Vec::with_capacity(size);
+        let col_names = Vec::with_capacity(size);
+        let row_names_hashmap = HashMap::new();
+        let col_names_hashmap = HashMap::new();
+        let legal_moves_indices_indexset: IndexSet<usize> = IndexSet::new();
         let flat_index_to_check_indices = HashMap::new();
 
         let mut board = Self {
             size,
             n_in_a_row,
-            black_stones,
-            white_stones,
+            squares,
             row_names,
             col_names,
             row_names_hashmap,
             col_names_hashmap,
-            legal_moves_indices_hashset,
+            legal_moves_indices_indexset,
             flat_index_to_check_indices,
             turn: Player::Black,
             outcome: None,
@@ -78,13 +68,13 @@ impl Board {
 
         board.initialize_legal_moves_indexset();
         board.initialize_flat_index_to_check_indices();
-
+        board.initialize_names_and_hashmaps();
         board
     }
 
     pub fn place_stone(&mut self, square_string: &String) -> Result<(), ()> {
         if square_string.len() < 2 {
-            return Ok(());
+            return Err(());
         }
         let row_string = (square_string[1..]).to_string();
         let col_string = (square_string[0..1]).to_string();
@@ -105,20 +95,14 @@ impl Board {
 
     fn place_stone_at_index(&mut self, index: usize) -> Result<(), ()> {
         // Cannot place a stone on an occupied square
-        if self.black_stones[index] == OCCUPIED || self.white_stones[index] == OCCUPIED {
+        if let Square::Occupied(_) = self.squares[index] {
             return Err(());
         }
 
         // Place stone
-        match self.turn {
-            Player::Black => {
-                self.black_stones[index] = OCCUPIED;
-            }
-            Player::White => {
-                self.white_stones[index] = OCCUPIED;
-            }
-        }
-        self.legal_moves_indices_hashset.remove(&index);
+        self.squares[index] = Square::Occupied(self.turn);
+        self.legal_moves_indices_indexset.remove(&index);
+        self.num_stones_placed += 1;
 
         // Check for an outcome
         // If no winner nor draw, switch the turn.
@@ -128,17 +112,15 @@ impl Board {
                 Player::Black => self.turn = Player::White,
                 Player::White => self.turn = Player::Black,
             }
-
-            self.num_stones_placed += 1;
         }
 
         Ok(())
     }
 
     pub fn place_stone_at_random(&mut self) -> Result<(), ()> {
-        let random_index = rand::thread_rng().gen_range(0..self.legal_moves_indices_hashset.len());
+        let random_index = rand::thread_rng().gen_range(0..self.legal_moves_indices_indexset.len());
         let random_square_index = self
-            .legal_moves_indices_hashset
+            .legal_moves_indices_indexset
             .get_index(random_index)
             .unwrap();
 
@@ -147,9 +129,9 @@ impl Board {
 
     pub fn legal_moves(&self) -> HashSet<String> {
         let mut legal_moves_hashset: HashSet<String> =
-            HashSet::with_capacity(self.legal_moves_indices_hashset.len());
+            HashSet::with_capacity(self.legal_moves_indices_indexset.len());
 
-        for i in self.legal_moves_indices_hashset.iter() {
+        for i in self.legal_moves_indices_indexset.iter() {
             let (row_index, col_index) = self.flat_index_to_row_col(*i);
             let legal_move = self.col_names[col_index].clone() + &self.row_names[row_index];
             legal_moves_hashset.insert(legal_move);
@@ -169,11 +151,11 @@ impl Board {
 
         if horizontal_vertical_diagonal_indices
             .iter()
-            .map(|indices| self.n_in_a_row_in_indices(indices))
-            .any(|x| x)
+            .any(|indices| self.n_in_a_row_in_indices(indices))
         {
             return Some(Outcome::Winner(self.turn));
         }
+
         if self.num_stones_placed == self.size * self.size {
             return Some(Outcome::Draw);
         }
@@ -185,10 +167,7 @@ impl Board {
         for w in indices.windows(self.n_in_a_row) {
             let is_n_in_a_row: bool = w
                 .iter()
-                .map(|i| match self.turn {
-                    Player::Black => self.black_stones[*i] == OCCUPIED,
-                    Player::White => self.white_stones[*i] == OCCUPIED,
-                })
+                .map(|i| self.squares[*i] == Square::Occupied(self.turn))
                 .all(|x| x);
 
             if is_n_in_a_row {
@@ -223,8 +202,7 @@ impl Board {
     }
 
     pub fn reset(&mut self) {
-        self.black_stones.fill(VACANT);
-        self.white_stones.fill(VACANT);
+        self.squares.fill(Square::Vacant);
         self.turn = Player::Black;
         self.outcome = None;
         self.num_stones_placed = 0;
@@ -232,11 +210,11 @@ impl Board {
     }
 
     fn initialize_legal_moves_indexset(&mut self) {
-        self.legal_moves_indices_hashset.clear();
+        self.legal_moves_indices_indexset.clear();
         for row_index in 0..self.size {
             for col_index in 0..self.size {
                 let index = self.row_col_to_flat_index(row_index, col_index);
-                self.legal_moves_indices_hashset.insert(index);
+                self.legal_moves_indices_indexset.insert(index);
             }
         }
     }
@@ -281,6 +259,20 @@ impl Board {
         }
     }
 
+    fn initialize_names_and_hashmaps(&mut self) {
+        self.row_names = (1..=self.size as u32).map(|c| c.to_string()).collect();
+        self.col_names = (b'A'..=b'Z')
+            .filter(|c| c - b'A' < self.size as u8)
+            .map(|c| (c as char).to_string())
+            .collect();
+        for (i, n) in self.row_names.iter().enumerate() {
+            self.row_names_hashmap.insert(n.clone(), i);
+        }
+        for (i, n) in self.col_names.iter().enumerate() {
+            self.col_names_hashmap.insert(n.clone(), i);
+        }
+    }
+
     pub fn show(&self) {
         let mut board_string = String::new();
         let padded_row_names: Vec<String> = self
@@ -300,12 +292,10 @@ impl Board {
             for col_index in 0..self.size {
                 let index = self.row_col_to_flat_index(row_index, col_index);
 
-                if self.black_stones[index] {
-                    row_string.push_str("X ");
-                } else if self.white_stones[index] {
-                    row_string.push_str("O ");
-                } else {
-                    row_string.push_str(". ");
+                match self.squares[index] {
+                    Square::Occupied(Player::Black) => row_string.push_str("X "),
+                    Square::Occupied(Player::White) => row_string.push_str("O "),
+                    Square::Vacant => row_string.push_str(". "),
                 }
             }
             board_string.push_str(&row_string);
