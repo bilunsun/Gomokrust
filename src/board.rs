@@ -1,6 +1,7 @@
 use indexmap::IndexSet;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Player {
@@ -41,8 +42,8 @@ impl Board {
         assert!(n_in_a_row <= size, "n_in_a_row cannot be larger than size.");
         assert!(n_in_a_row > 1, "n_in_a_row must be at least 2.");
 
-        let _base_board_size = size + (n_in_a_row - 1) * 2;
-        let squares = vec![Square::Vacant; _base_board_size * _base_board_size];
+        let base_board_size = size + (n_in_a_row - 1) * 2;
+        let squares = vec![Square::Vacant; base_board_size * base_board_size];
 
         let row_names = Vec::with_capacity(size);
         let col_names = Vec::with_capacity(size);
@@ -164,17 +165,11 @@ impl Board {
     }
 
     fn n_in_a_row_in_indices(&self, indices: &Vec<usize>) -> bool {
-        for w in indices.windows(self.n_in_a_row) {
-            let is_n_in_a_row: bool = w
-                .iter()
+        indices.windows(self.n_in_a_row).any(|w| {
+            w.iter()
                 .map(|i| self.squares[*i] == Square::Occupied(self.turn))
-                .all(|x| x);
-
-            if is_n_in_a_row {
-                return true;
-            }
-        }
-        false
+                .all(|x| x)
+        })
     }
 
     fn base_board_size(&self) -> usize {
@@ -223,7 +218,6 @@ impl Board {
         self.flat_index_to_check_indices = HashMap::new();
         for row_index in 0..self.size {
             for col_index in 0..self.size {
-                let mut check_indices: Vec<Vec<usize>> = vec![];
                 let flat_index = self.row_col_to_flat_index(row_index, col_index);
 
                 let horizontal_indices: Vec<usize> =
@@ -249,6 +243,7 @@ impl Board {
                     .map(|(i, offset)| (*i as i32 + offset) as usize)
                     .collect();
 
+                let mut check_indices: Vec<Vec<usize>> = vec![];
                 check_indices.push(horizontal_indices);
                 check_indices.push(vertical_indices);
                 check_indices.push(forward_slash_indices);
@@ -272,8 +267,10 @@ impl Board {
             self.col_names_hashmap.insert(n.clone(), i);
         }
     }
+}
 
-    pub fn show(&self) {
+impl fmt::Display for Board {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut board_string = String::new();
         let padded_row_names: Vec<String> = self
             .row_names
@@ -306,6 +303,6 @@ impl Board {
         board_string.push_str(&self.col_names.join(" "));
         board_string.push_str("\n");
 
-        println!("{board_string}");
+        write!(f, "{board_string}")
     }
 }

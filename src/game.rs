@@ -5,7 +5,7 @@ use crate::board::{Board, Outcome, Player};
 
 pub fn play_game() {
     let mut board = Board::new(3, 3);
-    board.show();
+    println!("{board}");
 
     while !board.is_game_over() {
         let mut square_string = String::new();
@@ -26,15 +26,15 @@ pub fn play_game() {
                 println!("{square_string} is not a valid move.");
             }
         }
-        board.show();
+        println!("{board}");
     }
 }
 
 pub fn play_random_game() {
-    let mut board = Board::new(15, 5);
+    let mut board = Board::new(3, 3);
     while !board.is_game_over() {
         board.place_stone_at_random();
-        board.show();
+        println!("{board}");
     }
 }
 
