@@ -46,9 +46,9 @@ impl Board {
 
         let row_names = Vec::with_capacity(size);
         let col_names = Vec::with_capacity(size);
-        let row_names_hashmap = HashMap::new();
-        let col_names_hashmap = HashMap::new();
-        let legal_moves_indices_indexset: IndexSet<usize> = IndexSet::new();
+        let row_names_hashmap = HashMap::with_capacity(size);
+        let col_names_hashmap = HashMap::with_capacity(size);
+        let legal_moves_indices_indexset = IndexSet::with_capacity(size * size);
         let flat_index_to_check_indices = HashMap::new();
 
         let mut board = Self {
