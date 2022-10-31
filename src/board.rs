@@ -30,6 +30,7 @@ pub struct Board {
     pub outcome: Option<Outcome>,
     pub num_stones_placed: usize,
     legal_moves_indices_hashset: IndexSet<usize>,
+    flat_index_to_check_indices: HashMap<usize, Vec<Vec<usize>>>,
 }
 
 impl Board {
@@ -57,6 +58,7 @@ impl Board {
         }
 
         let legal_moves_indices_hashset: IndexSet<usize> = IndexSet::with_capacity(size * size);
+        let flat_index_to_check_indices = HashMap::new();
 
         let mut board = Self {
             size,
@@ -68,12 +70,14 @@ impl Board {
             row_names_hashmap,
             col_names_hashmap,
             legal_moves_indices_hashset,
+            flat_index_to_check_indices,
             turn: Player::Black,
             outcome: None,
             num_stones_placed: 0,
         };
 
         board.initialize_legal_moves_indexset();
+        board.initialize_flat_index_to_check_indices();
 
         board
     }
@@ -158,40 +162,18 @@ impl Board {
     }
 
     fn check_outcome(&self, flat_index: usize) -> Option<Outcome> {
-        let horizontal_indices: Vec<usize> =
-            (flat_index - self.n_in_a_row + 1..flat_index + self.n_in_a_row).collect();
-        if self.n_in_a_row_in_indices(&horizontal_indices) {
-            return Some(Outcome::Winner(self.turn));
-        }
+        let horizontal_vertical_diagonal_indices = self
+            .flat_index_to_check_indices
+            .get(&flat_index)
+            .expect("These should be pre-computed.");
 
-        let vertical_indices: Vec<usize> = (flat_index
-            - self.base_board_padding() * self.base_board_size()
-            ..=flat_index + self.base_board_padding() * self.base_board_size())
-            .step_by(self.base_board_size())
-            .collect();
-        if self.n_in_a_row_in_indices(&vertical_indices) {
-            return Some(Outcome::Winner(self.turn));
-        }
-
-        let diagonal_offsets: Vec<i32> =
-            (-(self.base_board_padding() as i32)..=self.base_board_padding() as i32).collect();
-        let forward_slash_indices: Vec<usize> = vertical_indices
+        if horizontal_vertical_diagonal_indices
             .iter()
-            .zip(diagonal_offsets.iter())
-            .map(|(i, offset)| (*i as i32 - offset) as usize)
-            .collect();
-        if self.n_in_a_row_in_indices(&forward_slash_indices) {
+            .map(|indices| self.n_in_a_row_in_indices(indices))
+            .any(|x| x)
+        {
             return Some(Outcome::Winner(self.turn));
         }
-        let back_slash_indices: Vec<usize> = vertical_indices
-            .iter()
-            .zip(diagonal_offsets.iter())
-            .map(|(i, offset)| (*i as i32 + offset) as usize)
-            .collect();
-        if self.n_in_a_row_in_indices(&back_slash_indices) {
-            return Some(Outcome::Winner(self.turn));
-        }
-
         if self.num_stones_placed == self.size * self.size {
             return Some(Outcome::Draw);
         }
@@ -255,6 +237,46 @@ impl Board {
             for col_index in 0..self.size {
                 let index = self.row_col_to_flat_index(row_index, col_index);
                 self.legal_moves_indices_hashset.insert(index);
+            }
+        }
+    }
+
+    fn initialize_flat_index_to_check_indices(&mut self) {
+        self.flat_index_to_check_indices = HashMap::new();
+        for row_index in 0..self.size {
+            for col_index in 0..self.size {
+                let mut check_indices: Vec<Vec<usize>> = vec![];
+                let flat_index = self.row_col_to_flat_index(row_index, col_index);
+
+                let horizontal_indices: Vec<usize> =
+                    (flat_index - self.n_in_a_row + 1..flat_index + self.n_in_a_row).collect();
+
+                let vertical_indices: Vec<usize> = (flat_index
+                    - self.base_board_padding() * self.base_board_size()
+                    ..=flat_index + self.base_board_padding() * self.base_board_size())
+                    .step_by(self.base_board_size())
+                    .collect();
+
+                let diagonal_offsets: Vec<i32> = (-(self.base_board_padding() as i32)
+                    ..=self.base_board_padding() as i32)
+                    .collect();
+                let forward_slash_indices: Vec<usize> = vertical_indices
+                    .iter()
+                    .zip(diagonal_offsets.iter())
+                    .map(|(i, offset)| (*i as i32 - offset) as usize)
+                    .collect();
+                let back_slash_indices: Vec<usize> = vertical_indices
+                    .iter()
+                    .zip(diagonal_offsets.iter())
+                    .map(|(i, offset)| (*i as i32 + offset) as usize)
+                    .collect();
+
+                check_indices.push(horizontal_indices);
+                check_indices.push(vertical_indices);
+                check_indices.push(forward_slash_indices);
+                check_indices.push(back_slash_indices);
+                self.flat_index_to_check_indices
+                    .insert(flat_index, check_indices);
             }
         }
     }

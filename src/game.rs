@@ -55,7 +55,7 @@ pub fn benchmark() {
 }
 
 pub fn check_stats() {
-    let n_games = 1_000;
+    let n_games = 10_000;
     let mut board = Board::new(15, 5);
 
     let mut black_wins = 0;
