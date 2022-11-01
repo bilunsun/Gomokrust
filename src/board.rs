@@ -22,6 +22,9 @@ pub enum Outcome {
     Draw,
 }
 
+// TODO: Find the right implementation
+pub struct Action(pub usize);
+
 pub struct Board {
     pub size: usize,
     pub n_in_a_row: usize,
@@ -80,55 +83,23 @@ impl Board {
         board
     }
 
-    /// Tries to place a stone at the location specified by a string.
-    ///
-    /// * `square_string` - The target location, e.g. "A1".
-    pub fn place_stone(&mut self, square_string: &String) -> Result<(), ()> {
-        if square_string.len() < 2 {
-            return Err(());
-        }
+    pub fn make_action(&mut self, action: Action) -> Result<Action, ()> {
+        // TODO: Find the right implementation
+        let action = action.0;
 
-        let row_string = (square_string[1..]).to_string();
-        let col_string = (square_string[0..1]).to_string();
-        let row_index = self.row_names_hashmap.get(&row_string);
-        let col_index = self.col_names_hashmap.get(&col_string);
-
-        if row_index.is_some() && col_index.is_some() {
-            let row_index = row_index.unwrap();
-            let col_index = col_index.unwrap();
-            let index = self.row_col_to_flat_index(*row_index, *col_index);
-
-            self.place_stone_at_index(index)?;
-            return Ok(());
-        }
-
-        return Err(());
-    }
-
-    /// Tries to place a stone at a specific index.
-    /// Checks whether the target square is occupied or vacant.
-    /// Updates the state of:
-    ///     - `self.square_states`
-    ///     - `self.legal_moves_indices_indexset`
-    ///     - `self.num_stones_placed`
-    ///     - `self.outcome`
-    ///     - `self.turn`
-    ///
-    /// * `index` - Index of `self.square_states`
-    pub fn place_stone_at_index(&mut self, index: usize) -> Result<(), ()> {
         // Cannot place a stone on an occupied square
-        if let SquareState::Occupied(_) = self.square_states[index] {
+        if let SquareState::Occupied(_) = self.square_states[action] {
             return Err(());
         }
 
         // Place stone
-        self.square_states[index] = SquareState::Occupied(self.turn);
-        self.legal_moves_indices_indexset.remove(&index);
+        self.square_states[action] = SquareState::Occupied(self.turn);
+        self.legal_moves_indices_indexset.remove(&action);
         self.num_stones_placed += 1;
 
         // Check for an outcome
         // If no winner nor draw, switch the turn.
-        self.outcome = self.check_outcome(index);
+        self.outcome = self.check_outcome(action);
         if self.outcome.is_none() {
             match self.turn {
                 Player::Black => self.turn = Player::White,
@@ -136,7 +107,28 @@ impl Board {
             }
         }
 
-        Ok(())
+        Ok(Action(action))
+    }
+
+    pub fn parse_string_to_action(&self, string: &String) -> Result<Action, ()> {
+        if string.len() < 2 {
+            return Err(());
+        }
+
+        let row_string = (string[1..]).to_string();
+        let col_string = (string[0..1]).to_string();
+        let row_index = self.row_names_hashmap.get(&row_string);
+        let col_index = self.col_names_hashmap.get(&col_string);
+
+        if row_index.is_none() || col_index.is_none() {
+            return Err(());
+        }
+
+        let row_index = row_index.unwrap();
+        let col_index = col_index.unwrap();
+        let index = self.row_col_to_flat_index(*row_index, *col_index);
+
+        Ok(Action(index))
     }
 
     /// Creates and returns a HashSet of legal moves as strings, e.g. "A1".

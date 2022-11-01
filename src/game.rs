@@ -3,7 +3,7 @@ use rand::Rng;
 use std::io::{self, Write};
 use std::time::Instant;
 
-use crate::board::{Board, Outcome, Player};
+use crate::board::{Action, Board, Outcome, Player};
 
 fn get_random_square_index(legal_moves_indices_indexset: &IndexSet<usize>) -> usize {
     let random_index = rand::thread_rng().gen_range(0..legal_moves_indices_indexset.len());
@@ -30,7 +30,8 @@ pub fn play_game() {
                 .expect("Failed to read line");
             square_string = square_string.trim().to_string();
 
-            if let Ok(()) = board.place_stone(&square_string) {
+            let action = board.parse_string_to_action(&square_string);
+            if action.is_ok() && board.make_action(action.unwrap()).is_ok() {
                 break;
             } else {
                 println!("{square_string} is not a valid move.");
@@ -45,7 +46,7 @@ pub fn play_random_game() {
     while !board.is_game_over() {
         let random_square_index = get_random_square_index(&board.legal_moves());
         board
-            .place_stone_at_index(random_square_index)
+            .make_action(Action(random_square_index))
             .expect("Randomly selected move from the legal moves should not result in an error.");
 
         println!("{board}");
@@ -60,7 +61,7 @@ pub fn benchmark() {
         board.reset();
         while !board.is_game_over() {
             let random_square_index = get_random_square_index(&board.legal_moves());
-            board.place_stone_at_index(random_square_index).expect(
+            board.make_action(Action(random_square_index)).expect(
                 "Randomly selected move from the legal moves should not result in an error.",
             );
         }
@@ -85,7 +86,7 @@ pub fn check_stats() {
         board.reset();
         while !board.is_game_over() {
             let random_square_index = get_random_square_index(&board.legal_moves());
-            board.place_stone_at_index(random_square_index).expect(
+            board.make_action(Action(random_square_index)).expect(
                 "Randomly selected move from the legal moves should not result in an error.",
             );
         }
