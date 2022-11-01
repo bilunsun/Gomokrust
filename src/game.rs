@@ -3,12 +3,12 @@ use rand::Rng;
 use std::io::{self, Write};
 use std::time::Instant;
 
-use crate::board::{Action, Board, Outcome, Player};
+use crate::board::{Board, Outcome, Player};
 
-fn get_random_square_index(legal_moves_indices_indexset: &IndexSet<usize>) -> usize {
-    let random_index = rand::thread_rng().gen_range(0..legal_moves_indices_indexset.len());
+fn get_random_action(legal_moves: &IndexSet<usize>) -> usize {
+    let random_index = rand::thread_rng().gen_range(0..legal_moves.len());
 
-    *legal_moves_indices_indexset
+    *legal_moves
         .get_index(random_index)
         .expect("The random index should be in the IndexSet.")
 }
@@ -44,25 +44,25 @@ pub fn play_game() {
 pub fn play_random_game() {
     let mut board = Board::new(3, 3);
     while !board.is_game_over() {
-        let random_square_index = get_random_square_index(&board.legal_moves());
-        board
-            .make_action(Action(random_square_index))
-            .expect("Randomly selected move from the legal moves should not result in an error.");
+        let random_action = get_random_action(&board.legal_actions());
+        board.make_action(random_action).expect(
+            "Randomly selected action from the legal actions should not result in an error.",
+        );
 
         println!("{board}");
     }
 }
 
 pub fn benchmark() {
-    let n_games = 10_000;
+    let n_games = 1_000;
     let mut board = Board::new(15, 5);
     let now = Instant::now();
     for _ in 0..n_games {
         board.reset();
         while !board.is_game_over() {
-            let random_square_index = get_random_square_index(&board.legal_moves());
-            board.make_action(Action(random_square_index)).expect(
-                "Randomly selected move from the legal moves should not result in an error.",
+            let random_action = get_random_action(&board.legal_actions());
+            board.make_action(random_action).expect(
+                "Randomly selected action from the legal actions should not result in an error.",
             );
         }
     }
@@ -85,8 +85,8 @@ pub fn check_stats() {
     for _ in 0..n_games {
         board.reset();
         while !board.is_game_over() {
-            let random_square_index = get_random_square_index(&board.legal_moves());
-            board.make_action(Action(random_square_index)).expect(
+            let random_action = get_random_action(&board.legal_actions());
+            board.make_action(random_action).expect(
                 "Randomly selected move from the legal moves should not result in an error.",
             );
         }

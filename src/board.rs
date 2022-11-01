@@ -22,8 +22,7 @@ pub enum Outcome {
     Draw,
 }
 
-// TODO: Find the right implementation
-pub struct Action(pub usize);
+pub type Action = usize;
 
 pub struct Board {
     pub size: usize,
@@ -36,8 +35,8 @@ pub struct Board {
     pub col_names_hashmap: HashMap<String, usize>,
     pub outcome: Option<Outcome>,
     pub num_stones_placed: usize,
-    legal_moves_indices_indexset: IndexSet<usize>,
-    flat_index_to_check_indices: HashMap<usize, Vec<Vec<usize>>>,
+    legal_actions_indexset: IndexSet<Action>,
+    action_to_check_indices: HashMap<Action, Vec<Vec<usize>>>,
 }
 
 impl Board {
@@ -59,8 +58,8 @@ impl Board {
         let col_names = Vec::with_capacity(size);
         let row_names_hashmap = HashMap::with_capacity(size);
         let col_names_hashmap = HashMap::with_capacity(size);
-        let legal_moves_indices_indexset = IndexSet::with_capacity(size * size);
-        let flat_index_to_check_indices = HashMap::new();
+        let legal_actions_indexset = IndexSet::with_capacity(size * size);
+        let action_to_check_indices = HashMap::new();
 
         let mut board = Self {
             size,
@@ -70,23 +69,20 @@ impl Board {
             col_names,
             row_names_hashmap,
             col_names_hashmap,
-            legal_moves_indices_indexset,
-            flat_index_to_check_indices,
+            legal_actions_indexset,
+            action_to_check_indices,
             turn: Player::Black,
             outcome: None,
             num_stones_placed: 0,
         };
 
-        board.initialize_legal_moves_indexset();
-        board.initialize_flat_index_to_check_indices();
+        board.initialize_legal_actions_indexset();
+        board.initialize_action_to_check_indices();
         board.initialize_names_and_hashmaps();
         board
     }
 
     pub fn make_action(&mut self, action: Action) -> Result<Action, ()> {
-        // TODO: Find the right implementation
-        let action = action.0;
-
         // Cannot place a stone on an occupied square
         if let SquareState::Occupied(_) = self.square_states[action] {
             return Err(());
@@ -94,7 +90,7 @@ impl Board {
 
         // Place stone
         self.square_states[action] = SquareState::Occupied(self.turn);
-        self.legal_moves_indices_indexset.remove(&action);
+        self.legal_actions_indexset.remove(&action);
         self.num_stones_placed += 1;
 
         // Check for an outcome
@@ -107,7 +103,7 @@ impl Board {
             }
         }
 
-        Ok(Action(action))
+        Ok(action)
     }
 
     pub fn parse_string_to_action(&self, string: &String) -> Result<Action, ()> {
@@ -126,19 +122,19 @@ impl Board {
 
         let row_index = row_index.unwrap();
         let col_index = col_index.unwrap();
-        let index = self.row_col_to_flat_index(*row_index, *col_index);
+        let action = self.row_col_to_action(*row_index, *col_index);
 
-        Ok(Action(index))
+        Ok(action)
     }
 
     /// Creates and returns a HashSet of legal moves as strings, e.g. "A1".
     /// Can be used with `place_stone`.
     pub fn legal_moves_as_strings(&self) -> HashSet<String> {
         let mut legal_moves_hashset: HashSet<String> =
-            HashSet::with_capacity(self.legal_moves_indices_indexset.len());
+            HashSet::with_capacity(self.legal_actions_indexset.len());
 
-        for i in self.legal_moves_indices_indexset.iter() {
-            let (row_index, col_index) = self.flat_index_to_row_col(*i);
+        for a in self.legal_actions_indexset.iter() {
+            let (row_index, col_index) = self.action_to_row_col(*a);
             let legal_move = self.col_names[col_index].clone() + &self.row_names[row_index];
             legal_moves_hashset.insert(legal_move);
         }
@@ -146,8 +142,8 @@ impl Board {
     }
 
     /// Returns a reference to `self.legal_moves_indices_indexset`
-    pub fn legal_moves(&self) -> &IndexSet<usize> {
-        &self.legal_moves_indices_indexset
+    pub fn legal_actions(&self) -> &IndexSet<usize> {
+        &self.legal_actions_indexset
     }
 
     /// Returns whether the game has ended, based on `self.outcome`.
@@ -160,7 +156,7 @@ impl Board {
     /// * `flat_index` - The index where the stone was just placed.
     fn check_outcome(&self, flat_index: usize) -> Option<Outcome> {
         let horizontal_vertical_diagonal_indices = self
-            .flat_index_to_check_indices
+            .action_to_check_indices
             .get(&flat_index)
             .expect("These should be pre-computed.");
 
@@ -205,7 +201,7 @@ impl Board {
     ///
     /// * `row_index` and `col_index` - The index pair to be converted
     ///     into a flat index.
-    fn row_col_to_flat_index(&self, row_index: usize, col_index: usize) -> usize {
+    fn row_col_to_action(&self, row_index: usize, col_index: usize) -> Action {
         let row_index = row_index + self.base_board_padding();
         let col_index = col_index + self.base_board_padding();
         row_index * self.base_board_size() + col_index
@@ -215,9 +211,9 @@ impl Board {
     /// Opposite of `row_col_to_flat_index`.
     ///
     /// * `index` - The index to be converted into `row_index` and `col_index`
-    fn flat_index_to_row_col(&self, index: usize) -> (usize, usize) {
-        let row_index = index / self.base_board_size();
-        let col_index = index % self.base_board_size();
+    fn action_to_row_col(&self, action: Action) -> (usize, usize) {
+        let row_index = action / self.base_board_size();
+        let col_index = action % self.base_board_size();
 
         (
             row_index - self.base_board_padding(),
@@ -231,36 +227,36 @@ impl Board {
         self.turn = Player::Black;
         self.outcome = None;
         self.num_stones_placed = 0;
-        self.initialize_legal_moves_indexset();
+        self.initialize_legal_actions_indexset();
     }
 
     /// Initializes an IndexSet containing all legal moves
     /// by iterating through pairs of `row_index` and `col_index`,
     /// then converting them to a flat index.
-    fn initialize_legal_moves_indexset(&mut self) {
-        self.legal_moves_indices_indexset.clear();
+    fn initialize_legal_actions_indexset(&mut self) {
+        self.legal_actions_indexset.clear();
         for row_index in 0..self.size {
             for col_index in 0..self.size {
-                let index = self.row_col_to_flat_index(row_index, col_index);
-                self.legal_moves_indices_indexset.insert(index);
+                let action = self.row_col_to_action(row_index, col_index);
+                self.legal_actions_indexset.insert(action);
             }
         }
     }
 
     /// Initializes the indices to be checked for a winning condition.
     /// The indices are used by `indices_contain_win`.
-    fn initialize_flat_index_to_check_indices(&mut self) {
-        self.flat_index_to_check_indices = HashMap::new();
+    fn initialize_action_to_check_indices(&mut self) {
+        self.action_to_check_indices = HashMap::new();
         for row_index in 0..self.size {
             for col_index in 0..self.size {
-                let flat_index = self.row_col_to_flat_index(row_index, col_index);
+                let action = self.row_col_to_action(row_index, col_index);
 
                 let horizontal_indices: Vec<usize> =
-                    (flat_index - self.n_in_a_row + 1..flat_index + self.n_in_a_row).collect();
+                    (action - self.n_in_a_row + 1..action + self.n_in_a_row).collect();
 
-                let vertical_indices: Vec<usize> = (flat_index
+                let vertical_indices: Vec<usize> = (action
                     - self.base_board_padding() * self.base_board_size()
-                    ..=flat_index + self.base_board_padding() * self.base_board_size())
+                    ..=action + self.base_board_padding() * self.base_board_size())
                     .step_by(self.base_board_size())
                     .collect();
 
@@ -283,8 +279,7 @@ impl Board {
                 check_indices.push(vertical_indices);
                 check_indices.push(forward_slash_indices);
                 check_indices.push(back_slash_indices);
-                self.flat_index_to_check_indices
-                    .insert(flat_index, check_indices);
+                self.action_to_check_indices.insert(action, check_indices);
             }
         }
     }
@@ -323,9 +318,9 @@ impl fmt::Display for Board {
             row_string.push_str(" ");
 
             for col_index in 0..self.size {
-                let index = self.row_col_to_flat_index(row_index, col_index);
+                let action = self.row_col_to_action(row_index, col_index);
 
-                match self.square_states[index] {
+                match self.square_states[action] {
                     SquareState::Occupied(Player::Black) => row_string.push_str("X "),
                     SquareState::Occupied(Player::White) => row_string.push_str("O "),
                     SquareState::Vacant => row_string.push_str(". "),
