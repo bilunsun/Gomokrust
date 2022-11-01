@@ -1,3 +1,11 @@
+#![warn(missing_docs)]
+
+mod board;
+mod game;
+
 fn main() {
-    println!("Hello, world!");
+    game::play_random_game();
+    game::benchmark();
+    game::check_stats();
+    game::play_game();
 }
