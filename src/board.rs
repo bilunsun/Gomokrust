@@ -2,7 +2,6 @@ extern crate indexmap;
 use indexmap::IndexSet;
 
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Player {
@@ -25,7 +24,7 @@ pub enum SquareState {
     Vacant,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Outcome {
     Winner(Player),
     Draw,
@@ -38,10 +37,6 @@ pub struct Board {
     pub n_in_a_row: usize,
     pub turn: Player,
     pub square_states: Vec<SquareState>,
-    pub row_names: Vec<String>,
-    pub col_names: Vec<String>,
-    pub row_names_hashmap: HashMap<String, usize>,
-    pub col_names_hashmap: HashMap<String, usize>,
     pub outcome: Option<Outcome>,
     pub num_stones_placed: usize,
     legal_actions_indexset: IndexSet<Action>,
@@ -63,10 +58,6 @@ impl Board {
         let base_board_size = size + (n_in_a_row - 1) * 2;
         let square_states = vec![SquareState::Vacant; base_board_size * base_board_size];
 
-        let row_names = Vec::with_capacity(size);
-        let col_names = Vec::with_capacity(size);
-        let row_names_hashmap = HashMap::with_capacity(size);
-        let col_names_hashmap = HashMap::with_capacity(size);
         let legal_actions_indexset = IndexSet::with_capacity(size * size);
         let action_to_check_indices = HashMap::new();
 
@@ -74,10 +65,6 @@ impl Board {
             size,
             n_in_a_row,
             square_states,
-            row_names,
-            col_names,
-            row_names_hashmap,
-            col_names_hashmap,
             legal_actions_indexset,
             action_to_check_indices,
             turn: Player::Black,
@@ -87,7 +74,6 @@ impl Board {
 
         board.initialize_legal_actions_indexset();
         board.initialize_action_to_check_indices();
-        board.initialize_names_and_hashmaps();
         board
     }
 
@@ -122,8 +108,10 @@ impl Board {
 
         let row_string = (string[1..]).to_string();
         let col_string = (string[0..1]).to_string();
-        let row_index = self.row_names_hashmap.get(&row_string);
-        let col_index = self.col_names_hashmap.get(&col_string);
+
+        let (row_names_hashmap, col_names_hashmap) = get_names_hashmaps(self.size);
+        let row_index = row_names_hashmap.get(&row_string);
+        let col_index = col_names_hashmap.get(&col_string);
 
         if row_index.is_none() || col_index.is_none() {
             return Err(());
@@ -139,12 +127,13 @@ impl Board {
     /// Creates and returns a HashSet of legal moves as strings, e.g. "A1".
     /// Can be used with `place_stone`.
     pub fn legal_moves_as_strings(&self) -> HashSet<String> {
+        let (row_names, col_names) = get_row_col_names(self.size);
         let mut legal_moves_hashset: HashSet<String> =
             HashSet::with_capacity(self.legal_actions_indexset.len());
 
         for a in self.legal_actions_indexset.iter() {
             let (row_index, col_index) = self.action_to_row_col(*a);
-            let legal_move = self.col_names[col_index].clone() + &self.row_names[row_index];
+            let legal_move = col_names[col_index].clone() + &row_names[row_index];
             legal_moves_hashset.insert(legal_move);
         }
         legal_moves_hashset
@@ -292,21 +281,6 @@ impl Board {
             }
         }
     }
-
-    /// Initializes the necessary Vec and HashMap objects for displaying the board.
-    fn initialize_names_and_hashmaps(&mut self) {
-        self.row_names = (1..=self.size as u32).map(|c| c.to_string()).collect();
-        self.col_names = (b'A'..=b'Z')
-            .filter(|c| c - b'A' < self.size as u8)
-            .map(|c| (c as char).to_string())
-            .collect();
-        for (i, n) in self.row_names.iter().enumerate() {
-            self.row_names_hashmap.insert(n.clone(), i);
-        }
-        for (i, n) in self.col_names.iter().enumerate() {
-            self.col_names_hashmap.insert(n.clone(), i);
-        }
-    }
 }
 
 impl Clone for Board {
@@ -315,10 +289,6 @@ impl Clone for Board {
             size: self.size,
             n_in_a_row: self.n_in_a_row,
             square_states: self.square_states.clone(),
-            row_names: self.row_names.clone(),
-            col_names: self.col_names.clone(),
-            row_names_hashmap: self.row_names_hashmap.clone(),
-            col_names_hashmap: self.col_names_hashmap.clone(),
             legal_actions_indexset: self.legal_actions_indexset.clone(),
             action_to_check_indices: self.action_to_check_indices.clone(),
             turn: self.turn,
@@ -328,40 +298,64 @@ impl Clone for Board {
     }
 }
 
-impl fmt::Display for Board {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut board_string = String::new();
-        let padded_row_names: Vec<String> = self
-            .row_names
-            .iter()
-            .map(|n| {
-                let mut padded_name = String::from(if n.len() == 1 { " " } else { "" });
-                padded_name.push_str(n);
-                padded_name
-            })
-            .collect();
+fn get_row_col_names(size: usize) -> (Vec<String>, Vec<String>) {
+    let row_names: Vec<String> = (1..=size as u32).map(|c| c.to_string()).collect();
+    let col_names: Vec<String> = (b'A'..=b'Z')
+        .filter(|c| c - b'A' < size as u8)
+        .map(|c| (c as char).to_string())
+        .collect();
 
-        for row_index in (0..self.size).rev() {
-            let mut row_string = padded_row_names[row_index].clone();
-            row_string.push_str(" ");
+    (row_names, col_names)
+}
 
-            for col_index in 0..self.size {
-                let action = self.row_col_to_action(row_index, col_index);
+fn get_names_hashmaps(size: usize) -> (HashMap<String, usize>, HashMap<String, usize>) {
+    let (row_names, col_names) = get_row_col_names(size);
+    let mut row_names_hashmap = HashMap::with_capacity(size);
+    let mut col_names_hashmap = HashMap::with_capacity(size);
 
-                match self.square_states[action] {
-                    SquareState::Occupied(Player::Black) => row_string.push_str("X "),
-                    SquareState::Occupied(Player::White) => row_string.push_str("O "),
-                    SquareState::Vacant => row_string.push_str(". "),
-                }
-            }
-            board_string.push_str(&row_string);
-            board_string.push_str("\n");
-        }
-
-        board_string.push_str("   ");
-        board_string.push_str(&self.col_names.join(" "));
-        board_string.push_str("\n");
-
-        write!(f, "{board_string}")
+    for (i, n) in row_names.iter().enumerate() {
+        row_names_hashmap.insert(n.clone(), i);
     }
+    for (i, n) in col_names.iter().enumerate() {
+        col_names_hashmap.insert(n.clone(), i);
+    }
+
+    (row_names_hashmap, col_names_hashmap)
+}
+
+pub fn show(board: &Board) {
+    let mut board_string = String::new();
+    let (row_names, col_names) = get_row_col_names(board.size);
+
+    let padded_row_names: Vec<String> = row_names
+        .iter()
+        .map(|n| {
+            let mut padded_name = String::from(if n.len() == 1 { " " } else { "" });
+            padded_name.push_str(n);
+            padded_name
+        })
+        .collect();
+
+    for row_index in (0..board.size).rev() {
+        let mut row_string = padded_row_names[row_index].clone();
+        row_string.push_str(" ");
+
+        for col_index in 0..board.size {
+            let action = board.row_col_to_action(row_index, col_index);
+
+            match board.square_states[action] {
+                SquareState::Occupied(Player::Black) => row_string.push_str("X "),
+                SquareState::Occupied(Player::White) => row_string.push_str("O "),
+                SquareState::Vacant => row_string.push_str(". "),
+            }
+        }
+        board_string.push_str(&row_string);
+        board_string.push_str("\n");
+    }
+
+    board_string.push_str("   ");
+    board_string.push_str(&col_names.join(" "));
+    board_string.push_str("\n");
+
+    println!("{board_string}");
 }

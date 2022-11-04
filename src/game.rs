@@ -1,12 +1,13 @@
 use std::io::{self, Write};
 use std::time::Instant;
 
-use crate::board::{Board, Outcome, Player};
+use crate::board::{show, Action, Board, Outcome, Player};
+use crate::mcts::MCTS;
 use crate::utils::get_random_action;
 
 pub fn play_game() {
     let mut board = Board::new(3, 3);
-    println!("{board}");
+    show(&board);
 
     while !board.is_game_over() {
         let mut square_string = String::new();
@@ -28,7 +29,7 @@ pub fn play_game() {
                 println!("{square_string} is not a valid move.");
             }
         }
-        println!("{board}");
+        show(&board);
     }
 }
 
@@ -40,7 +41,7 @@ pub fn play_random_game() {
             "Randomly selected action from the legal actions should not result in an error.",
         );
 
-        println!("{board}");
+        show(&board);
     }
 }
 
@@ -106,4 +107,45 @@ pub fn check_stats() {
     );
     println!("Draws: {:.1}%", draws as f32 / n_games as f32 * 100.0);
     println!("Stones placed: {:}", num_stones_placed / n_games);
+}
+
+pub fn get_player_action(board: &Board) -> Action {
+    let mut square_string = String::new();
+    loop {
+        square_string.clear();
+        println!("{:?}", board.legal_moves_as_strings());
+
+        print!("\nYour move: ");
+        io::stdout().flush().unwrap();
+        io::stdin()
+            .read_line(&mut square_string)
+            .expect("Failed to read line");
+        square_string = square_string.trim().to_string();
+
+        let action = board.parse_string_to_action(&square_string);
+        if action.is_ok() && board.legal_actions().contains(&action.unwrap()) {
+            return action.unwrap();
+        } else {
+            println!("{square_string} is not a valid move.");
+        }
+    }
+}
+
+pub fn play_game_against_mcts() {
+    let mut board = Board::new(3, 3);
+    show(&board);
+
+    while !board.is_game_over() {
+        let action: Action;
+        if board.turn == Player::Black {
+            action = get_player_action(&mut board);
+        } else {
+            let mut mcts = MCTS::new(&board);
+            action = mcts.get_best_action(100_000);
+        }
+        board.make_action(action).ok();
+        show(&board);
+    }
+
+    dbg!(&board.outcome);
 }

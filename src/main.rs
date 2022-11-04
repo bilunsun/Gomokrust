@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 mod board;
 mod game;
 mod mcts;
@@ -10,5 +8,7 @@ fn main() {
     // game::benchmark();
     // game::check_stats();
     // game::play_game();
-    mcts::test_mcts();
+    mcts::test_mcts_black_wins();
+    mcts::test_mcts_white_wins();
+    game::play_game_against_mcts();
 }
