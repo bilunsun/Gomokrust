@@ -4,10 +4,19 @@ use indexmap::IndexSet;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Player {
     Black,
     White,
+}
+
+impl Player {
+    pub fn opposite(&self) -> Self {
+        match self {
+            Player::White => Player::Black,
+            Player::Black => Player::White,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -296,6 +305,25 @@ impl Board {
         }
         for (i, n) in self.col_names.iter().enumerate() {
             self.col_names_hashmap.insert(n.clone(), i);
+        }
+    }
+}
+
+impl Clone for Board {
+    fn clone(&self) -> Self {
+        Self {
+            size: self.size,
+            n_in_a_row: self.n_in_a_row,
+            square_states: self.square_states.clone(),
+            row_names: self.row_names.clone(),
+            col_names: self.col_names.clone(),
+            row_names_hashmap: self.row_names_hashmap.clone(),
+            col_names_hashmap: self.col_names_hashmap.clone(),
+            legal_actions_indexset: self.legal_actions_indexset.clone(),
+            action_to_check_indices: self.action_to_check_indices.clone(),
+            turn: self.turn,
+            outcome: self.outcome,
+            num_stones_placed: self.num_stones_placed,
         }
     }
 }

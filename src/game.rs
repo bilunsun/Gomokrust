@@ -1,17 +1,8 @@
-use indexmap::IndexSet;
-use rand::Rng;
 use std::io::{self, Write};
 use std::time::Instant;
 
 use crate::board::{Board, Outcome, Player};
-
-fn get_random_action(legal_moves: &IndexSet<usize>) -> usize {
-    let random_index = rand::thread_rng().gen_range(0..legal_moves.len());
-
-    *legal_moves
-        .get_index(random_index)
-        .expect("The random index should be in the IndexSet.")
-}
+use crate::utils::get_random_action;
 
 pub fn play_game() {
     let mut board = Board::new(3, 3);
