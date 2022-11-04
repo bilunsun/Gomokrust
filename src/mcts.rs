@@ -1,18 +1,21 @@
+use rand::Rng;
+use std::rc::Rc;
+use std::time::Instant;
+
 use crate::board::{Action, Board, Outcome, Player};
 use crate::utils::get_random_action;
-use rand::Rng;
 
 type Reward = f32;
 
-pub fn outcome_to_reward(outcome: Outcome, turn: Player) -> Reward {
-    match outcome {
-        Outcome::Winner(winner) => match winner {
-            turn => 1.0,
-            _ => -1.0,
-        },
-        Outcome::Draw => 0.0,
-    }
-}
+// pub fn outcome_to_reward(outcome: Outcome, turn: Player) -> Reward {
+//     match outcome {
+//         Outcome::Winner(winner) => match winner {
+//             turn => 1.0,
+//             _ => -1.0,
+//         },
+//         Outcome::Draw => 0.0,
+//     }
+// }
 
 pub fn rollout(board: &mut Board) -> Outcome {
     while !board.is_game_over() {
@@ -44,7 +47,6 @@ pub struct Node {
 }
 
 impl Node {
-    // pub fn new(action: Option<Action>) -> Self {
     pub fn new(action: Option<Action>, turn: Player) -> Self {
         Node {
             action,
@@ -71,14 +73,10 @@ impl Node {
         best_child
     }
 
-    pub fn is_leaf(&self) -> bool {
-        self.children.len() == 0
-    }
-
-    pub fn expand(&mut self, board: &Board) -> Option<&mut Node> {
+    pub fn expand(&mut self, board: &Board) {
         if board.is_game_over() {
             self.state = State::Terminal;
-            return None;
+            return;
         }
 
         // Create a child node for all untried moves
@@ -88,59 +86,50 @@ impl Node {
             self.children.push(child);
         }
 
-        // Randomly select a child node
-        let random_index = rand::thread_rng().gen_range(0..self.children.len());
-        Some(&mut self.children[random_index])
+        // // Randomly select a child node
+        // let random_index = rand::thread_rng().gen_range(0..self.children.len());
+        // Some(&mut self.children[random_index])
     }
 
     pub fn iteration(&mut self, board: &mut Board) {
+        // let mut parents: Vec<Rc<&mut Node>> = Vec::new();
+        let mut parents_pointers: Vec<*mut Node> = Vec::new();
+
         // Selection
         let mut node = self;
-        while !node.is_leaf() {
+        while !node.children.is_empty() {
+            // parents.push(Rc::clone(&Rc::new(node)));
+            parents_pointers.push(node);
             node = node.get_best_child().unwrap();
         }
 
         // Expansion
-        match node.expand(board) {
-            Some(node) => {}
-            None => {}
+        node.expand(board);
+
+        // Rollout
+        let outcome = rollout(board);
+        let reward = 1.0;
+        // let reward = match outcome {
+        //     Outcome::Winner(winner) => {
+        //         if winner == self.turn {
+        //             1
+        //         } else {
+        //             -1
+        //         }
+        //     }
+        //     Outcome::Draw => 0,
+        // };
+
+        // Backpropagate
+        node.visit_count += 1;
+        node.value += reward;
+        for parent_pointer in parents_pointers.iter().rev() {
+            let mut parent = unsafe { parent_pointer.as_mut().unwrap() };
+            parent.visit_count += 1;
+            parent.value += reward;
+            // dbg!(&parent.visit_count);
         }
     }
-
-    // pub fn iteration(&mut self, board: &mut Board) -> Reward {
-    //     let reward = match self.state {
-    //         State::Terminal => {
-    //             let outcome = board.outcome.expect("Expandable node with state=State::Terminal means the game is over, and thus should have an outcome.");
-    //             let reward = outcome_to_reward(outcome, self.turn);
-    //             -reward
-    //         }
-    //         State::Expandable => {
-    //             let child = self.expand(board);
-    //             match child {
-    //                 Some(child) => {
-    //                     board
-    //                         .make_action(child.action.expect("Child node should have an action."))
-    //                         .expect("Child node action should be in legal moves.");
-
-    //                     let outcome = rollout(board);
-    //                     let reward = outcome_to_reward(outcome, child.turn);
-
-    //                     child.visit_count += 1;
-    //                     child.value += reward;
-    //                     -reward
-    //                 }
-    //                 None => {
-    //                     let outcome = board.outcome.expect("Expandable node with state=State::Terminal means the game is over, and thus should have an outcome.");
-    //                     let reward = outcome_to_reward(outcome, self.turn);
-    //                     -reward
-    //                 }
-    //             }
-    //         }
-    //     };
-    //     self.visit_count += 1;
-    //     self.value += reward;
-    //     -reward
-    // }
 }
 
 pub struct MCTS {
@@ -155,49 +144,42 @@ impl MCTS {
         Self { root, board }
     }
 
-    pub fn get_best_action(&mut self) {
-        for i in 0..10 {
-            self.root.iteration(&mut self.board);
+    pub fn get_best_action(&mut self, n_iterations: usize) {
+        for i in 0..n_iterations {
+            let mut board = self.board.clone();
+            self.root.iteration(&mut board);
+            // self.root.iteration(&mut self.board);
         }
-        for child in &self.root.children {
-            dbg!(&child);
-        }
+        // for child in &self.root.children {
+        //     dbg!(&child);
+        // }
     }
 }
 
 pub fn test_mcts() {
-    let mut board = Board::new(3, 3);
+    let mut board = Board::new(10, 5);
     println!("{board}");
 
-    let action = board.parse_string_to_action(&String::from("B2")).unwrap();
-    board.make_action(action).ok();
+    for move_string in vec!["B2", "A2", "C3", "A1", "A3", "B3"].iter() {
+        let action = board
+            .parse_string_to_action(&String::from(*move_string))
+            .unwrap();
+        board.make_action(action).ok();
+    }
     println!("{board}");
 
-    let action = board.parse_string_to_action(&String::from("A2")).unwrap();
-    board.make_action(action).ok();
-    println!("{board}");
-
-    let action = board.parse_string_to_action(&String::from("C3")).unwrap();
-    board.make_action(action).ok();
-    println!("{board}");
-
-    let action = board.parse_string_to_action(&String::from("A1")).unwrap();
-    board.make_action(action).ok();
-    println!("{board}");
-
-    let action = board.parse_string_to_action(&String::from("A3")).unwrap();
-    board.make_action(action).ok();
-    println!("{board}");
-
-    let action = board.parse_string_to_action(&String::from("B3")).unwrap();
-    board.make_action(action).ok();
-    println!("{board}");
-
-    // let action = board.parse_string_to_action(&String::from("")).unwrap();
-    // board.make_action(action).ok();
-    // println!("{board}");
     let mut mcts = MCTS::new(&board);
-    let best_action = mcts.get_best_action();
+    let now = Instant::now();
+    let best_action = mcts.get_best_action(1_000);
 
-    println!("OK.");
+    // let n_iterations = 1_000;
+    // let mut mcts = MCTS::new(&board);
+    // let now = Instant::now();
+    // let best_action = mcts.get_best_action(1_000);
+
+    // let elapsed_s = now.elapsed().as_secs_f32();
+    // println!(
+    //     "Iterations per second: {}",
+    //     (n_iterations as f32 / elapsed_s) as usize
+    // );
 }
