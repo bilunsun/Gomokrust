@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 indexmap = "1.9.1"
 rand = "0.8.5"
+serde_json = "1.0"
+ndarray = "0.15.6"

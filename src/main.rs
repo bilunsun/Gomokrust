@@ -5,12 +5,11 @@ mod utils;
 
 fn main() {
     // game::play_random_game();
-    // game::benchmark();
-    // game::check_stats();
+    game::benchmark();
     // game::play_game();
-    mcts::test_mcts_black_wins();
-    mcts::test_mcts_white_wins();
-    // mcts::benchmark();
+    // mcts::test_mcts_black_wins();
+    // mcts::test_mcts_white_wins();
+    mcts::benchmark();
     // game::play_game_against_mcts();
 
     println!("Random vs MCTS");
