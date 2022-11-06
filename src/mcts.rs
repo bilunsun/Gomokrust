@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::board::{show, Action, Board, Outcome, Player};
+use crate::board::{Action, Board, Outcome, Player};
 use crate::utils::get_random_action;
 
 const SQRT_TWO: f32 = 1.41421356237;
@@ -138,17 +138,6 @@ impl MCTS {
             let mut board = self.board.clone();
             self.iteration(&mut board);
         }
-
-        // // For debugging only
-        // for child in &mut self.root.children {
-        //     println!(
-        //         "{} -> {}",
-        //         child.action.unwrap(),
-        //         child.uct(self.root.visit_count)
-        //     );
-        // }
-
-        // dbg!(&self.root);
 
         let best_child = self
             .root
