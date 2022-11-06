@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use crate::board::{Action, Board};
 use crate::mcts::MCTS;
 
-pub fn get_random_action(legal_moves: &IndexSet<usize>) -> Action {
+pub fn get_random_action(legal_moves: &IndexSet<Action>) -> Action {
     let random_index = rand::thread_rng().gen_range(0..legal_moves.len());
 
     *legal_moves

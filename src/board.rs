@@ -48,16 +48,20 @@ impl BaseBoard {
         }
     }
 
-    pub fn set(&mut self, player: Player, location: BaseBoardLocation) {
+    pub fn set(&mut self, location: BaseBoardLocation, player: Player) {
         self.data[location] = SquareState::Occupied(player);
     }
 
-    pub fn get(&self, location: BaseBoardLocation) -> SquareState {
-        self.data[location]
+    pub fn get(&self, location: BaseBoardLocation) -> &SquareState {
+        &self.data[location]
     }
 
     pub fn is_occupied(&self, location: BaseBoardLocation) -> bool {
-        self.get(location) != SquareState::Vacant
+        *self.get(location) != SquareState::Vacant
+    }
+
+    pub fn is_occupied_by(&self, location: BaseBoardLocation, player: Player) -> bool {
+        *self.get(location) == SquareState::Occupied(player)
     }
 
     pub fn reset(&mut self) {
@@ -106,18 +110,19 @@ impl Board {
         };
 
         board.initialize_legal_actions_indexset();
-        board.initialize_action_to_check_indices();
+        board.initialize_action_to_check_locations();
         board
     }
 
     pub fn make_action(&mut self, action: Action) -> Result<Action, ()> {
+        let base_board_location = self.action_to_base_board_location(action);
         // Cannot place a stone on an occupied square
-        if self.base_board.is_occupied(action) {
+        if self.base_board.is_occupied(base_board_location) {
             return Err(());
         }
 
         // Place stone
-        self.base_board.set(self.turn, action);
+        self.base_board.set(base_board_location, self.turn);
         self.legal_actions_indexset.remove(&action);
         self.num_stones_placed += 1;
 
@@ -164,8 +169,8 @@ impl Board {
         let mut legal_moves_hashset: HashSet<String> =
             HashSet::with_capacity(self.legal_actions_indexset.len());
 
-        for a in self.legal_actions_indexset.iter() {
-            let (row_index, col_index) = self.action_to_row_col(*a);
+        for action in self.legal_actions_indexset.iter() {
+            let [row_index, col_index] = *action;
             let legal_move = col_names[col_index].clone() + &row_names[row_index];
             legal_moves_hashset.insert(legal_move);
         }
@@ -186,14 +191,14 @@ impl Board {
     ///
     /// * `flat_index` - The index where the stone was just placed.
     fn check_outcome(&self, action: Action) -> Option<Outcome> {
-        let horizontal_vertical_diagonal_indices = self
+        let check_locations = self
             .action_to_check_indices
             .get(&action)
             .expect("These should be pre-computed.");
 
-        if horizontal_vertical_diagonal_indices
+        if check_locations
             .iter()
-            .any(|indices| self.indices_contain_win(indices))
+            .any(|locations| self.locations_contain_win(locations))
         {
             return Some(Outcome::Winner(self.turn));
         }
@@ -205,12 +210,14 @@ impl Board {
         None
     }
 
-    /// Checks whether a list of indices contain a winning condition
+    /// Checks whether a list of BaseBoardLocations contain a winning condition
     /// by checking whether there are `n_in_a_row` occupied states
-    fn indices_contain_win(&self, indices: &Vec<usize>) -> bool {
-        indices
-            .windows(self.n_in_a_row)
-            .any(|w| w.iter().map(|i| self.base_board.is_occupied(*i)).all(|x| x))
+    fn locations_contain_win(&self, locations: &Vec<BaseBoardLocation>) -> bool {
+        locations.windows(self.n_in_a_row).any(|w| {
+            w.iter()
+                .map(|location| self.base_board.is_occupied_by(*location, self.turn))
+                .all(|x| x)
+        })
     }
 
     /// Returns the size of the base board,
@@ -225,7 +232,7 @@ impl Board {
     }
 
     /// Converts an Action to a BaseBoardLocation
-    fn action_to_base_board_location(&self, action: Action) -> BaseBoardLocation {
+    pub fn action_to_base_board_location(&self, action: Action) -> BaseBoardLocation {
         [
             action[0] + self.base_board_padding(),
             action[1] + self.base_board_padding(),
@@ -233,7 +240,7 @@ impl Board {
     }
 
     /// Converts a BaseBoardLocation to an Action
-    fn action_to_row_col(&self, base_board_location: BaseBoardLocation) -> Action {
+    fn base_board_location_to_action(&self, base_board_location: BaseBoardLocation) -> Action {
         [
             base_board_location[0] - self.base_board_padding(),
             base_board_location[1] - self.base_board_padding(),
@@ -262,48 +269,51 @@ impl Board {
         }
     }
 
-    /// Initializes the indices to be checked for a winning condition.
-    /// The indices are used by `indices_contain_win`.
-    fn initialize_action_to_check_indices(&mut self) {
+    /// Initializes the BaseBoardLocations to be checked for a winning condition for an action.
+    fn initialize_action_to_check_locations(&mut self) {
         self.action_to_check_indices = HashMap::new();
 
         for row_index in 0..self.size {
             for col_index in 0..self.size {
-                let action = self.row_col_to_action(row_index, col_index);
+                let action = [row_index, col_index] as Action;
 
-                let horizontal_indices: Vec<Action> =
-                    (action - self.n_in_a_row + 1..action + self.n_in_a_row).collect();
+                let mut horizontal: Vec<BaseBoardLocation> = Vec::new();
+                let mut vertical: Vec<BaseBoardLocation> = Vec::new();
+                let mut forward_slash: Vec<BaseBoardLocation> = Vec::new();
+                let mut backward_slash: Vec<BaseBoardLocation> = Vec::new();
 
-                let horizontal = (-self.n_in_a_row + 1..self.n_in_a_row)
-                    .iter()
-                    .map(|i| self.action_to_base_board_location([action[0] + i, action[1]]))
-                    .collect();
+                for offset in -(self.base_board_padding() as i32)..=self.base_board_padding() as i32
+                {
+                    horizontal.push(self.action_to_base_board_location([
+                        row_index,
+                        (col_index as i32 + offset) as usize,
+                    ]
+                        as Action));
 
-                let vertical_indices: Vec<Action> = (action
-                    - self.base_board_padding() * self.base_board_size()
-                    ..=action + self.base_board_padding() * self.base_board_size())
-                    .step_by(self.base_board_size())
-                    .collect();
+                    vertical.push(self.action_to_base_board_location([
+                        (row_index as i32 + offset) as usize,
+                        col_index,
+                    ]
+                        as Action));
 
-                let diagonal_offsets: Vec<i32> = (-(self.base_board_padding() as i32)
-                    ..=self.base_board_padding() as i32)
-                    .collect();
-                let forward_slash_indices: Vec<Action> = vertical_indices
-                    .iter()
-                    .zip(diagonal_offsets.iter())
-                    .map(|(i, offset)| (*i as i32 - offset) as usize)
-                    .collect();
-                let back_slash_indices: Vec<Action> = vertical_indices
-                    .iter()
-                    .zip(diagonal_offsets.iter())
-                    .map(|(i, offset)| (*i as i32 + offset) as usize)
-                    .collect();
+                    forward_slash.push(self.action_to_base_board_location([
+                        (row_index as i32 - offset) as usize,
+                        (col_index as i32 + offset) as usize,
+                    ]
+                        as Action));
+
+                    backward_slash.push(self.action_to_base_board_location([
+                        (row_index as i32 - offset) as usize,
+                        (col_index as i32 - offset) as usize,
+                    ]
+                        as Action));
+                }
 
                 let mut check_indices: Vec<Vec<BaseBoardLocation>> = vec![];
-                check_indices.push(horizontal_indices);
-                check_indices.push(vertical_indices);
-                check_indices.push(forward_slash_indices);
-                check_indices.push(back_slash_indices);
+                check_indices.push(horizontal);
+                check_indices.push(vertical);
+                check_indices.push(forward_slash);
+                check_indices.push(backward_slash);
                 self.action_to_check_indices.insert(action, check_indices);
             }
         }
