@@ -66,9 +66,9 @@ pub fn benchmark() {
     );
 }
 
-pub fn check_stats() {
+pub fn random_against_random() {
     let n_games = 10_000;
-    let mut board = Board::new(15, 5);
+    let mut board = Board::new(3, 3);
 
     let mut black_wins = 0;
     let mut white_wins = 0;
@@ -141,11 +141,56 @@ pub fn play_game_against_mcts() {
             action = get_player_action(&mut board);
         } else {
             let mut mcts = MCTS::new(&board);
-            action = mcts.get_best_action(100_000);
+            action = mcts.get_best_action(1_600);
         }
         board.make_action(action).ok();
         show(&board);
     }
 
     dbg!(&board.outcome);
+}
+
+pub fn random_against_mcts() {
+    let n_games = 100;
+    let mcts_player = Player::White;
+    let mut mcts_wins = 0;
+    let mut random_wins = 0;
+    let mut draws = 0;
+    for i in 0..n_games {
+        let mut board = Board::new(3, 3);
+
+        while !board.is_game_over() {
+            let action: Action;
+            if board.turn == mcts_player {
+                let mut mcts = MCTS::new(&board);
+                action = mcts.get_best_action(1_600);
+            } else {
+                action = get_random_action(&board.legal_actions());
+            }
+            board.make_action(action).ok();
+        }
+
+        match board.outcome {
+            Some(outcome) => match outcome {
+                Outcome::Winner(winner) => {
+                    if winner == mcts_player {
+                        mcts_wins += 1;
+                    } else {
+                        random_wins += 1;
+                    }
+                }
+                Outcome::Draw => draws += 1,
+            },
+            None => panic!("The game has ended and should have an outcome."),
+        }
+    }
+    println!(
+        "MCTS wins: {:.1}%",
+        mcts_wins as f32 / n_games as f32 * 100.0
+    );
+    println!(
+        "Random wins: {:.1}%",
+        random_wins as f32 / n_games as f32 * 100.0
+    );
+    println!("Draws: {:.1}%", draws as f32 / n_games as f32 * 100.0);
 }

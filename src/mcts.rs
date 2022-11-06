@@ -53,6 +53,8 @@ impl Node {
             Outcome::Winner(winner) => {
                 if winner != self.turn {
                     self.value += 1.0
+                } else {
+                    self.value -= 1.0;
                 }
             }
             _ => (),
@@ -202,8 +204,8 @@ pub fn test_mcts_white_wins() {
 }
 
 pub fn benchmark() {
-    let n_iterations = 50_000;
-    let board = Board::new(8, 5);
+    let n_iterations = 1_600;
+    let board = Board::new(15, 5);
     let mut mcts = MCTS::new(&board);
     let now = Instant::now();
 
@@ -214,4 +216,5 @@ pub fn benchmark() {
         "Iterations per second: {}",
         (n_iterations as f32 / elapsed_s) as usize
     );
+    println!("{} seconds per {} iterations", elapsed_s, n_iterations);
 }
