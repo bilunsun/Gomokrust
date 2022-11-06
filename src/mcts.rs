@@ -95,8 +95,8 @@ impl Node {
 }
 
 pub struct MCTS {
-    root: Node,
-    board: Board,
+    pub root: Node,
+    pub board: Board,
 }
 
 impl MCTS {

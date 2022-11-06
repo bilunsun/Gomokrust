@@ -1,6 +1,9 @@
 extern crate indexmap;
 use indexmap::IndexSet;
 
+extern crate ndarray;
+use ndarray::prelude::*;
+
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -18,7 +21,7 @@ impl Player {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum SquareState {
     Occupied(Player),
     Vacant,
@@ -30,17 +33,47 @@ pub enum Outcome {
     Draw,
 }
 
-pub type Action = usize;
+pub type Action = [usize; 2];
+type BaseBoardLocation = [usize; 2];
+
+#[derive(Debug, Clone)]
+pub struct BaseBoard {
+    data: Array<SquareState, Ix2>,
+}
+
+impl BaseBoard {
+    pub fn new(size: usize) -> Self {
+        Self {
+            data: Array::<SquareState, Ix2>::from_elem((size, size), SquareState::Vacant),
+        }
+    }
+
+    pub fn set(&mut self, player: Player, location: BaseBoardLocation) {
+        self.data[location] = SquareState::Occupied(player);
+    }
+
+    pub fn get(&self, location: BaseBoardLocation) -> SquareState {
+        self.data[location]
+    }
+
+    pub fn is_occupied(&self, location: BaseBoardLocation) -> bool {
+        self.get(location) != SquareState::Vacant
+    }
+
+    pub fn reset(&mut self) {
+        self.data.fill(SquareState::Vacant);
+    }
+}
 
 pub struct Board {
     pub size: usize,
     pub n_in_a_row: usize,
     pub turn: Player,
-    pub square_states: Vec<SquareState>,
+    pub base_board: BaseBoard,
     pub outcome: Option<Outcome>,
     pub num_stones_placed: usize,
     legal_actions_indexset: IndexSet<Action>,
-    action_to_check_indices: HashMap<Action, Vec<Vec<usize>>>,
+    action_to_check_indices: HashMap<Action, Vec<Vec<BaseBoardLocation>>>,
 }
 
 impl Board {
@@ -56,7 +89,7 @@ impl Board {
         assert!(n_in_a_row > 1, "n_in_a_row must be at least 2.");
 
         let base_board_size = size + (n_in_a_row - 1) * 2;
-        let square_states = vec![SquareState::Vacant; base_board_size * base_board_size];
+        let base_board = BaseBoard::new(base_board_size);
 
         let legal_actions_indexset = IndexSet::with_capacity(size * size);
         let action_to_check_indices = HashMap::new();
@@ -64,7 +97,7 @@ impl Board {
         let mut board = Self {
             size,
             n_in_a_row,
-            square_states,
+            base_board,
             legal_actions_indexset,
             action_to_check_indices,
             turn: Player::Black,
@@ -79,12 +112,12 @@ impl Board {
 
     pub fn make_action(&mut self, action: Action) -> Result<Action, ()> {
         // Cannot place a stone on an occupied square
-        if let SquareState::Occupied(_) = self.square_states[action] {
+        if self.base_board.is_occupied(action) {
             return Err(());
         }
 
         // Place stone
-        self.square_states[action] = SquareState::Occupied(self.turn);
+        self.base_board.set(self.turn, action);
         self.legal_actions_indexset.remove(&action);
         self.num_stones_placed += 1;
 
@@ -117,9 +150,9 @@ impl Board {
             return Err(());
         }
 
-        let row_index = row_index.unwrap();
-        let col_index = col_index.unwrap();
-        let action = self.row_col_to_action(*row_index, *col_index);
+        let row_index = row_index.expect("Just checked is_none().");
+        let col_index = col_index.expect("Just checked is_none().");
+        let action = [*row_index, *col_index] as Action;
 
         Ok(action)
     }
@@ -140,7 +173,7 @@ impl Board {
     }
 
     /// Returns a reference to `self.legal_moves_indices_indexset`
-    pub fn legal_actions(&self) -> &IndexSet<usize> {
+    pub fn legal_actions(&self) -> &IndexSet<Action> {
         &self.legal_actions_indexset
     }
 
@@ -152,10 +185,10 @@ impl Board {
     /// Checks whether the move made resulted in an Outcome.
     ///
     /// * `flat_index` - The index where the stone was just placed.
-    fn check_outcome(&self, flat_index: usize) -> Option<Outcome> {
+    fn check_outcome(&self, action: Action) -> Option<Outcome> {
         let horizontal_vertical_diagonal_indices = self
             .action_to_check_indices
-            .get(&flat_index)
+            .get(&action)
             .expect("These should be pre-computed.");
 
         if horizontal_vertical_diagonal_indices
@@ -173,14 +206,11 @@ impl Board {
     }
 
     /// Checks whether a list of indices contain a winning condition
-    /// by checking whether there are `n_in_a_row` square states
-    /// that are occupied
+    /// by checking whether there are `n_in_a_row` occupied states
     fn indices_contain_win(&self, indices: &Vec<usize>) -> bool {
-        indices.windows(self.n_in_a_row).any(|w| {
-            w.iter()
-                .map(|i| self.square_states[*i] == SquareState::Occupied(self.turn))
-                .all(|x| x)
-        })
+        indices
+            .windows(self.n_in_a_row)
+            .any(|w| w.iter().map(|i| self.base_board.is_occupied(*i)).all(|x| x))
     }
 
     /// Returns the size of the base board,
@@ -194,34 +224,25 @@ impl Board {
         self.n_in_a_row - 1
     }
 
-    /// Converts from `row_index` and `col_index` to a flat index
-    /// to index into `self.square_states`.
-    ///
-    /// * `row_index` and `col_index` - The index pair to be converted
-    ///     into a flat index.
-    fn row_col_to_action(&self, row_index: usize, col_index: usize) -> Action {
-        let row_index = row_index + self.base_board_padding();
-        let col_index = col_index + self.base_board_padding();
-        row_index * self.base_board_size() + col_index
+    /// Converts an Action to a BaseBoardLocation
+    fn action_to_base_board_location(&self, action: Action) -> BaseBoardLocation {
+        [
+            action[0] + self.base_board_padding(),
+            action[1] + self.base_board_padding(),
+        ] as BaseBoardLocation
     }
 
-    /// Converts from a flat index to a `row_index` and `col_index`.
-    /// Opposite of `row_col_to_flat_index`.
-    ///
-    /// * `index` - The index to be converted into `row_index` and `col_index`
-    fn action_to_row_col(&self, action: Action) -> (usize, usize) {
-        let row_index = action / self.base_board_size();
-        let col_index = action % self.base_board_size();
-
-        (
-            row_index - self.base_board_padding(),
-            col_index - self.base_board_padding(),
-        )
+    /// Converts a BaseBoardLocation to an Action
+    fn action_to_row_col(&self, base_board_location: BaseBoardLocation) -> Action {
+        [
+            base_board_location[0] - self.base_board_padding(),
+            base_board_location[1] - self.base_board_padding(),
+        ] as Action
     }
 
     /// Resets the state of the board.
     pub fn reset(&mut self) {
-        self.square_states.fill(SquareState::Vacant);
+        self.base_board.reset();
         self.turn = Player::Black;
         self.outcome = None;
         self.num_stones_placed = 0;
@@ -230,13 +251,13 @@ impl Board {
 
     /// Initializes an IndexSet containing all legal moves
     /// by iterating through pairs of `row_index` and `col_index`,
-    /// then converting them to a flat index.
+    /// then converting them to an Action.
     fn initialize_legal_actions_indexset(&mut self) {
         self.legal_actions_indexset.clear();
         for row_index in 0..self.size {
             for col_index in 0..self.size {
-                let action = self.row_col_to_action(row_index, col_index);
-                self.legal_actions_indexset.insert(action);
+                self.legal_actions_indexset
+                    .insert([row_index, col_index] as Action);
             }
         }
     }
@@ -245,14 +266,20 @@ impl Board {
     /// The indices are used by `indices_contain_win`.
     fn initialize_action_to_check_indices(&mut self) {
         self.action_to_check_indices = HashMap::new();
+
         for row_index in 0..self.size {
             for col_index in 0..self.size {
                 let action = self.row_col_to_action(row_index, col_index);
 
-                let horizontal_indices: Vec<usize> =
+                let horizontal_indices: Vec<Action> =
                     (action - self.n_in_a_row + 1..action + self.n_in_a_row).collect();
 
-                let vertical_indices: Vec<usize> = (action
+                let horizontal = (-self.n_in_a_row + 1..self.n_in_a_row)
+                    .iter()
+                    .map(|i| self.action_to_base_board_location([action[0] + i, action[1]]))
+                    .collect();
+
+                let vertical_indices: Vec<Action> = (action
                     - self.base_board_padding() * self.base_board_size()
                     ..=action + self.base_board_padding() * self.base_board_size())
                     .step_by(self.base_board_size())
@@ -261,18 +288,18 @@ impl Board {
                 let diagonal_offsets: Vec<i32> = (-(self.base_board_padding() as i32)
                     ..=self.base_board_padding() as i32)
                     .collect();
-                let forward_slash_indices: Vec<usize> = vertical_indices
+                let forward_slash_indices: Vec<Action> = vertical_indices
                     .iter()
                     .zip(diagonal_offsets.iter())
                     .map(|(i, offset)| (*i as i32 - offset) as usize)
                     .collect();
-                let back_slash_indices: Vec<usize> = vertical_indices
+                let back_slash_indices: Vec<Action> = vertical_indices
                     .iter()
                     .zip(diagonal_offsets.iter())
                     .map(|(i, offset)| (*i as i32 + offset) as usize)
                     .collect();
 
-                let mut check_indices: Vec<Vec<usize>> = vec![];
+                let mut check_indices: Vec<Vec<BaseBoardLocation>> = vec![];
                 check_indices.push(horizontal_indices);
                 check_indices.push(vertical_indices);
                 check_indices.push(forward_slash_indices);
@@ -288,7 +315,7 @@ impl Clone for Board {
         Self {
             size: self.size,
             n_in_a_row: self.n_in_a_row,
-            square_states: self.square_states.clone(),
+            base_board: self.base_board.clone(),
             legal_actions_indexset: self.legal_actions_indexset.clone(),
             action_to_check_indices: self.action_to_check_indices.clone(),
             turn: self.turn,
@@ -341,9 +368,9 @@ pub fn show(board: &Board) {
         row_string.push_str(" ");
 
         for col_index in 0..board.size {
-            let action = board.row_col_to_action(row_index, col_index);
+            let action = board.action_to_base_board_location([row_index, col_index] as Action);
 
-            match board.square_states[action] {
+            match board.base_board.get(action) {
                 SquareState::Occupied(Player::Black) => row_string.push_str("X "),
                 SquareState::Occupied(Player::White) => row_string.push_str("O "),
                 SquareState::Vacant => row_string.push_str(". "),
