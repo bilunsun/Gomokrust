@@ -187,9 +187,7 @@ impl Board {
         self.outcome.is_some()
     }
 
-    /// Checks whether the move made resulted in an Outcome.
-    ///
-    /// * `flat_index` - The index where the stone was just placed.
+    /// Checks whether the action made resulted in an Outcome.
     fn check_outcome(&self, action: Action) -> Option<Outcome> {
         let check_locations = self
             .action_to_check_indices
