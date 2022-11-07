@@ -19,6 +19,13 @@ impl Player {
             Player::Black => Player::White,
         }
     }
+
+    pub fn to_bool(&self) -> bool {
+        match self {
+            Player::White => false,
+            Player::Black => true,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -317,11 +324,30 @@ impl Board {
         }
     }
 
-    pub fn get_game_board(&self) -> ArrayView2<SquareState> {
-        self.base_board.data.slice(s![
+    pub fn to_repr(&self) -> Vec<Vec<Vec<bool>>> {
+        let board_slice = self.base_board.data.slice(s![
             self.n_in_a_row - 1..self.size + self.base_board_padding(),
             self.n_in_a_row - 1..self.size + self.base_board_padding()
-        ])
+        ]);
+
+        let mut game_board = vec![vec![vec![false; self.size]; self.size]; 2];
+
+        // Set the pieces
+        for ((row_index, col_index), square_state) in board_slice.indexed_iter() {
+            match square_state {
+                SquareState::Occupied(turn) => match turn {
+                    Player::Black => game_board[0][row_index][col_index] = true,
+                    Player::White => game_board[1][row_index][col_index] = true,
+                },
+                _ => (),
+            }
+        }
+
+        // Set the turn
+        let turn_plane = vec![vec![self.turn.to_bool(); self.size]; self.size];
+        game_board.push(turn_plane);
+
+        game_board
     }
 }
 
@@ -378,7 +404,7 @@ pub fn show(board: &Board) {
         })
         .collect();
 
-    for row_index in (0..board.size) {
+    for row_index in 0..board.size {
         let mut row_string = padded_row_names[row_index].clone();
         row_string.push_str(" ");
 

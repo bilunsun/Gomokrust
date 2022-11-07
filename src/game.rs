@@ -1,6 +1,15 @@
 use std::io::{self, Write};
 use std::time::Instant;
 
+extern crate serde_json;
+use serde_json::{json, Value};
+
+extern crate uuid;
+use uuid::Uuid;
+
+extern crate rayon;
+use rayon::prelude::*;
+
 use crate::board::{show, Action, Board, Outcome, Player};
 use crate::mcts::MCTS;
 use crate::utils::get_random_action;
@@ -140,8 +149,8 @@ pub fn play_game_against_mcts() {
         if board.turn == Player::Black {
             action = get_player_action(&mut board);
         } else {
-            let mut mcts = MCTS::new(&board);
-            action = mcts.get_best_action(1_600);
+            let mut mcts = MCTS::new(&board, 1_600);
+            action = mcts.get_best_action();
         }
         board.make_action(action).ok();
         show(&board);
@@ -162,8 +171,8 @@ pub fn random_against_mcts() {
         while !board.is_game_over() {
             let action: Action;
             if board.turn == mcts_player {
-                let mut mcts = MCTS::new(&board);
-                action = mcts.get_best_action(1_600);
+                let mut mcts = MCTS::new(&board, 1_600);
+                action = mcts.get_best_action();
             } else {
                 action = get_random_action(&board.legal_actions());
             }
@@ -193,4 +202,72 @@ pub fn random_against_mcts() {
         random_wins as f32 / n_games as f32 * 100.0
     );
     println!("Draws: {:.1}%", draws as f32 / n_games as f32 * 100.0);
+}
+
+pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations: usize) {
+    let mut board = Board::new(size, n_in_a_row);
+
+    let mut policies = Vec::new();
+    let mut board_reprs = Vec::new();
+
+    while !board.is_game_over() {
+        let mut mcts = MCTS::new(&board, n_mcts_simulations);
+        let action = mcts.get_best_action();
+
+        policies.push(mcts.get_policy());
+        board_reprs.push(board.to_repr());
+
+        board.make_action(action).ok();
+    }
+
+    // Create values
+    let value = match board
+        .outcome
+        .expect("The game has ended and should have an outcome.")
+    {
+        Outcome::Winner(winner) => match winner {
+            Player::Black => 1.0,
+            Player::White => -1.0,
+        },
+        Outcome::Draw => 0.0,
+    };
+
+    // JSON
+    let mut game_json: Vec<Value> = vec![];
+    for (board_repr, policy) in board_reprs.iter().zip(policies.iter()) {
+        game_json.push(json!({
+            "state": board_repr,
+            "policy": policy,
+            "value": value
+        }));
+    }
+    std::fs::write(
+        format!("games/{}.json", Uuid::new_v4()),
+        serde_json::to_string_pretty(&game_json).unwrap(),
+    )
+    .unwrap();
+}
+
+pub fn self_play() {
+    let n_games: usize = 9000;
+    let size: usize = 10;
+    let n_in_a_row: usize = 5;
+    let n_mcts_simulations = 800;
+
+    let total_elapsed_s: f32 = (0..n_games)
+        .collect::<Vec<usize>>()
+        .par_iter()
+        .map(|_| {
+            let now = Instant::now();
+            self_play_single_game(size, n_in_a_row, n_mcts_simulations);
+            let elapsed_s = now.elapsed().as_secs_f32();
+            println!("Games per second: {}", 1.0 / elapsed_s);
+            elapsed_s
+        })
+        .sum();
+
+    println!(
+        "Total games per second: {}",
+        n_games as f32 / total_elapsed_s
+    )
 }

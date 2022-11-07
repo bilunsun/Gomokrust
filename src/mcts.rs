@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::board::{Action, Board, Outcome, Player};
@@ -97,13 +98,18 @@ impl Node {
 pub struct MCTS {
     pub root: Node,
     pub board: Board,
+    pub n_iterations: usize,
 }
 
 impl MCTS {
-    pub fn new(board: &Board) -> Self {
+    pub fn new(board: &Board, n_iterations: usize) -> Self {
         let root = Node::new(None, board.turn);
         let board = board.clone();
-        Self { root, board }
+        Self {
+            root,
+            board,
+            n_iterations,
+        }
     }
 
     pub fn iteration(&mut self, board: &mut Board) {
@@ -133,8 +139,8 @@ impl MCTS {
         }
     }
 
-    pub fn get_best_action(&mut self, n_iterations: usize) -> Action {
-        for _ in 0..n_iterations {
+    pub fn get_best_action(&mut self) -> Action {
+        for _ in 0..self.n_iterations {
             let mut board = self.board.clone();
             self.iteration(&mut board);
         }
@@ -144,6 +150,18 @@ impl MCTS {
             .get_best_child()
             .expect("Root node should have children.");
         best_child.action.expect("Child should have action")
+    }
+
+    pub fn get_policy(&self) -> Vec<Vec<f32>> {
+        let mut policy = vec![vec![0f32; self.board.size]; self.board.size];
+
+        for child in &self.root.children {
+            let [row_index, col_index] = child.action.expect("Child nodes should have an action.");
+            let p = child.visit_count as f32 / self.n_iterations as f32;
+            policy[row_index][col_index] = p;
+        }
+
+        policy
     }
 }
 
@@ -163,8 +181,8 @@ pub fn test_mcts_black_wins() {
         board.make_action(action).ok();
     }
 
-    let mut mcts = MCTS::new(&board);
-    let best_action = mcts.get_best_action(1_000);
+    let mut mcts = MCTS::new(&board, 1_000);
+    let best_action = mcts.get_best_action();
 
     dbg!(&best_action);
 
@@ -188,8 +206,8 @@ pub fn test_mcts_white_wins() {
         board.make_action(action).ok();
     }
 
-    let mut mcts = MCTS::new(&board);
-    let best_action = mcts.get_best_action(1_000);
+    let mut mcts = MCTS::new(&board, 1_000);
+    let best_action = mcts.get_best_action();
 
     dbg!(&best_action);
     // assert!(best_action == 31);
@@ -198,10 +216,10 @@ pub fn test_mcts_white_wins() {
 pub fn benchmark() {
     let n_iterations = 1_600;
     let board = Board::new(15, 5);
-    let mut mcts = MCTS::new(&board);
+    let mut mcts = MCTS::new(&board, n_iterations);
     let now = Instant::now();
 
-    mcts.get_best_action(n_iterations);
+    mcts.get_best_action();
 
     let elapsed_s = now.elapsed().as_secs_f32();
     println!(
