@@ -316,6 +316,13 @@ impl Board {
             }
         }
     }
+
+    pub fn get_game_board(&self) -> ArrayView2<SquareState> {
+        self.base_board.data.slice(s![
+            self.n_in_a_row - 1..self.size + self.base_board_padding(),
+            self.n_in_a_row - 1..self.size + self.base_board_padding()
+        ])
+    }
 }
 
 impl Clone for Board {
@@ -348,7 +355,7 @@ fn get_names_hashmaps(size: usize) -> (HashMap<String, usize>, HashMap<String, u
     let mut row_names_hashmap = HashMap::with_capacity(size);
     let mut col_names_hashmap = HashMap::with_capacity(size);
 
-    for (i, n) in row_names.iter().enumerate() {
+    for (i, n) in row_names.iter().rev().enumerate() {
         row_names_hashmap.insert(n.clone(), i);
     }
     for (i, n) in col_names.iter().enumerate() {
@@ -371,7 +378,7 @@ pub fn show(board: &Board) {
         })
         .collect();
 
-    for row_index in (0..board.size).rev() {
+    for row_index in (0..board.size) {
         let mut row_string = padded_row_names[row_index].clone();
         row_string.push_str(" ");
 
