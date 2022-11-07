@@ -19,6 +19,13 @@ impl Player {
             Player::Black => Player::White,
         }
     }
+
+    pub fn to_bool(&self) -> bool {
+        match self {
+            Player::White => false,
+            Player::Black => true,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -316,6 +323,32 @@ impl Board {
             }
         }
     }
+
+    pub fn to_repr(&self) -> Vec<Vec<Vec<bool>>> {
+        let board_slice = self.base_board.data.slice(s![
+            self.n_in_a_row - 1..self.size + self.base_board_padding(),
+            self.n_in_a_row - 1..self.size + self.base_board_padding()
+        ]);
+
+        let mut game_board = vec![vec![vec![false; self.size]; self.size]; 2];
+
+        // Set the pieces
+        for ((row_index, col_index), square_state) in board_slice.indexed_iter() {
+            match square_state {
+                SquareState::Occupied(turn) => match turn {
+                    Player::Black => game_board[0][row_index][col_index] = true,
+                    Player::White => game_board[1][row_index][col_index] = true,
+                },
+                _ => (),
+            }
+        }
+
+        // Set the turn
+        let turn_plane = vec![vec![self.turn.to_bool(); self.size]; self.size];
+        game_board.push(turn_plane);
+
+        game_board
+    }
 }
 
 impl Clone for Board {
@@ -348,7 +381,7 @@ fn get_names_hashmaps(size: usize) -> (HashMap<String, usize>, HashMap<String, u
     let mut row_names_hashmap = HashMap::with_capacity(size);
     let mut col_names_hashmap = HashMap::with_capacity(size);
 
-    for (i, n) in row_names.iter().enumerate() {
+    for (i, n) in row_names.iter().rev().enumerate() {
         row_names_hashmap.insert(n.clone(), i);
     }
     for (i, n) in col_names.iter().enumerate() {
@@ -371,7 +404,7 @@ pub fn show(board: &Board) {
         })
         .collect();
 
-    for row_index in (0..board.size).rev() {
+    for row_index in 0..board.size {
         let mut row_string = padded_row_names[row_index].clone();
         row_string.push_str(" ");
 

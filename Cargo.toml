@@ -10,3 +10,12 @@ indexmap = "1.9.1"
 rand = "0.8.5"
 serde_json = "1.0"
 ndarray = "0.15.6"
+itertools = "0.10.5"
+rayon = "1.5.3"
+
+[dependencies.uuid]
+features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+]
