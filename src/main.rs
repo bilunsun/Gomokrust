@@ -12,8 +12,8 @@ fn main() {
     // mcts::benchmark();
     // // game::play_game_against_mcts();
 
-    println!("Random vs MCTS");
-    game::random_against_mcts();
+    // println!("Random vs MCTS");
+    // game::random_against_mcts();
 
     // println!("");
 
@@ -21,6 +21,6 @@ fn main() {
     // game::random_against_random();
 
     // game::self_play(10);
-    // let board = board::Board::new(10, 5);
-    // utils::get_onnx_policy_value(&board);
+    let board = board::Board::new(10, 5);
+    utils::get_torchjit_policy_value(&board);
 }

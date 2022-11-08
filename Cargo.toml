@@ -14,6 +14,7 @@ itertools = "0.10.5"
 rayon = "1.5.3"
 tract-onnx = "0.18.3"
 tract-core = "0.3.3"
+tch = "0.9.0"
 
 [dependencies.uuid]
 features = [

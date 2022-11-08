@@ -68,6 +68,10 @@ class LitModel(pl.LightningModule):
     def on_train_end(self):
         self.to_onnx("test.onnx")
 
+        self.model.eval()
+        traced_script_module = torch.jit.trace(self.model, self.example_input_array.to(self.device))
+        traced_script_module.save("model.pt")
+
     def configure_optimizers(self):
         if self.scheduler is None:
             return self.optimizer

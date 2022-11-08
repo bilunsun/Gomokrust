@@ -5,6 +5,8 @@ extern crate tract_core;
 extern crate tract_onnx;
 use tract_onnx::prelude::*;
 
+extern crate tch;
+
 use ndarray::{Array, Array3, Array4};
 
 use crate::board::{Action, Board};
@@ -43,4 +45,12 @@ pub fn get_onnx_policy_value(board: &Board) -> (usize, usize, f32) {
     // dbg!(&value);
 
     (max_row, max_col, value)
+}
+
+pub fn get_torchjit_policy_value(board: &Board) {
+    let model = tch::CModule::load("model.pt").expect("Should be able to load the model");
+    let x = tch::Tensor::zeros(&[7], tch::kind::FLOAT_CPU);
+    let output = model.forward_ts(&[x]);
+
+    dbg!(&output);
 }
