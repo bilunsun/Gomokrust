@@ -26,6 +26,13 @@ impl Player {
             Player::Black => true,
         }
     }
+
+    pub fn to_f32(&self) -> f32 {
+        match self {
+            Player::Black => 1.0,
+            Player::White => 0.0,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -324,27 +331,27 @@ impl Board {
         }
     }
 
-    pub fn to_repr(&self) -> Vec<Vec<Vec<bool>>> {
+    pub fn to_repr(&self) -> Vec<Vec<Vec<f32>>> {
         let board_slice = self.base_board.data.slice(s![
             self.n_in_a_row - 1..self.size + self.base_board_padding(),
             self.n_in_a_row - 1..self.size + self.base_board_padding()
         ]);
 
-        let mut game_board = vec![vec![vec![false; self.size]; self.size]; 2];
+        let mut game_board = vec![vec![vec![0f32; self.size]; self.size]; 2];
 
         // Set the pieces
         for ((row_index, col_index), square_state) in board_slice.indexed_iter() {
             match square_state {
                 SquareState::Occupied(turn) => match turn {
-                    Player::Black => game_board[0][row_index][col_index] = true,
-                    Player::White => game_board[1][row_index][col_index] = true,
+                    Player::Black => game_board[0][row_index][col_index] = 1.0,
+                    Player::White => game_board[1][row_index][col_index] = 1.0,
                 },
                 _ => (),
             }
         }
 
         // Set the turn
-        let turn_plane = vec![vec![self.turn.to_bool(); self.size]; self.size];
+        let turn_plane = vec![vec![self.turn.to_f32(); self.size]; self.size];
         game_board.push(turn_plane);
 
         game_board

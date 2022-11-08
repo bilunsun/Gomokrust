@@ -20,5 +20,7 @@ fn main() {
     // println!("Random vs Random");
     // game::random_against_random();
 
-    game::self_play();
+    // game::self_play();
+    let board = board::Board::new(10, 5);
+    utils::get_onnx_policy_value(&board);
 }

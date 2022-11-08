@@ -41,8 +41,10 @@ class LitModel(pl.LightningModule):
             else None
         )
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.model(x)
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        policies, values = self.model(x)
+        max_indices = (policies == torch.max(policies)).nonzero().squeeze(0)
+        return max_indices[2], max_indices[3], values[0][0]
 
     def training_step(self, batch, _) -> torch.Tensor:
         states, policies, values = batch
@@ -52,8 +54,8 @@ class LitModel(pl.LightningModule):
         batch_size = policies.size(0)
         policies_pred = policies_pred.reshape(batch_size, -1)
         policies = policies.reshape(batch_size, -1)
+
         policy_loss = F.cross_entropy(policies_pred, policies)
-        # policy_loss = F.cross_entropy(policies.reshape(policies.size(0), -1), policies_pred.reshape(policies_pred.size(0), -1))
         value_loss = F.mse_loss(values, values_pred)
         train_loss = policy_loss + value_loss
 

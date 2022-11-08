@@ -46,10 +46,10 @@ class DataModule(pl.LightningDataModule):
         self.num_workers = num_workers
 
     def setup(self, stage=None):
-        # if os.path.exists("data.pt"):
-        #     states, policies, values = torch.load("data.pt")
-        # else:
-        states, policies, values = parse_game_data_from_json()
+        if os.path.exists("data.pt"):
+            states, policies, values = torch.load("data.pt")
+        else:
+            states, policies, values = parse_game_data_from_json()
 
         self.dataset = TensorDataset(states, policies, values)
 

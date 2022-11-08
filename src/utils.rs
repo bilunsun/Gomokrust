@@ -1,17 +1,13 @@
 use indexmap::IndexSet;
 use rand::Rng;
 
-extern crate serde_json;
-use serde_json::{json, Value};
+extern crate tract_core;
+extern crate tract_onnx;
+use tract_onnx::prelude::*;
 
-extern crate ndarray;
-use ndarray::prelude::*;
-
-extern crate itertools;
-use itertools::izip;
+use ndarray::{Array, Array3, Array4};
 
 use crate::board::{Action, Board};
-use crate::mcts::MCTS;
 
 pub fn get_random_action(legal_moves: &IndexSet<Action>) -> Action {
     let random_index = rand::thread_rng().gen_range(0..legal_moves.len());
@@ -21,23 +17,30 @@ pub fn get_random_action(legal_moves: &IndexSet<Action>) -> Action {
         .expect("The random index should be in the IndexSet.")
 }
 
-// pub fn game_to_json(
-//     policies: Vec<Vec<f32>>,
-//     value: f32,
-//     actions: Vec<Action>,
-//     board: &mut Board,
-// ) -> Value {
-//     board.reset();
+pub fn get_onnx_policy_value(board: &Board) -> (usize, usize, f32) {
+    let model = tract_onnx::onnx()
+        .model_for_path("test.onnx")
+        .expect("Should be able to load the model.")
+        .into_runnable()
+        .expect("Should be able to run the model.");
 
-//     // for
-//     let board_repr = board.to_repr();
+    let board_repr = board
+        .to_repr()
+        .into_iter()
+        .flat_map(|s| s.into_iter().flatten().collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let state_array = Array::from(board_repr).into_shape((1, 3, 10, 10)).unwrap();
 
-//     let json_data = json!({
-//         "value": 1.0,
-//         "policy": [1, 2, 3],
-//         "state": board_repr,
-//     });
+    let state_tensor = Tensor::from(state_array);
+    let inputs = tvec!(state_tensor);
+    let outputs = model.run(inputs).unwrap();
 
-//     println!("{}", json_data);
-//     json_data
-// }
+    let max_row: usize = *outputs.get(0).unwrap().to_scalar::<i64>().unwrap() as usize;
+    let max_col: usize = *outputs.get(1).unwrap().to_scalar::<i64>().unwrap() as usize;
+    let value: f32 = *outputs.get(2).unwrap().to_scalar().unwrap();
+    dbg!(&max_row);
+    dbg!(&max_col);
+    dbg!(&value);
+
+    (max_row, max_col, value)
+}
