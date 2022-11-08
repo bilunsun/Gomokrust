@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::board::{Action, Board, Outcome, Player};
-use crate::utils::get_random_action;
+use crate::utils::{get_onnx_policy_value, get_random_action};
 
 const SQRT_TWO: f32 = 1.41421356237;
 
@@ -49,7 +49,7 @@ impl Node {
         exploitation_term + exploration_term
     }
 
-    pub fn update(&mut self, outcome: Outcome) {
+    pub fn update_with_outcome(&mut self, outcome: Outcome) {
         match outcome {
             Outcome::Winner(winner) => {
                 if winner != self.turn {
@@ -60,6 +60,16 @@ impl Node {
             }
             _ => (),
         };
+
+        self.visit_count += 1;
+    }
+
+    /// The output of the neural network is always from Black's perspective
+    pub fn update(&mut self, value: f32) {
+        match self.turn {
+            Player::White => self.value += value,
+            Player::Black => self.value -= value,
+        }
 
         self.visit_count += 1;
     }
@@ -124,23 +134,34 @@ impl MCTS {
         }
 
         // Expansion
-        let outcome = match node.expand(board) {
-            Some(_) => rollout(board), // Rollout
-            None => board
-                .outcome
-                .expect("Terminal state should have an outcome."),
+        let value = match node.expand(board) {
+            Some(_) => {
+                let (max_row_, max_col, value) = get_onnx_policy_value(board); // Rollout
+                value
+            }
+            None => {
+                let outcome = board
+                    .outcome
+                    .expect("Terminal state should have an outcome.");
+
+                match outcome {
+                    Outcome::Winner(Player::Black) => 1.0,
+                    Outcome::Winner(Player::White) => -1.0,
+                    Outcome::Draw => 0.0,
+                }
+            }
         };
 
         // Backpropagate
-        node.update(outcome);
+        node.update(value);
         for parent_pointer in parents_pointers.iter().rev() {
             let parent = unsafe { parent_pointer.as_mut().unwrap() };
-            parent.update(outcome);
+            parent.update(value);
         }
     }
 
     pub fn get_best_action(&mut self) -> Action {
-        for _ in 0..self.n_iterations {
+        for i in 0..self.n_iterations {
             let mut board = self.board.clone();
             self.iteration(&mut board);
         }

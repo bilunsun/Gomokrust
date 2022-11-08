@@ -38,9 +38,9 @@ pub fn get_onnx_policy_value(board: &Board) -> (usize, usize, f32) {
     let max_row: usize = *outputs.get(0).unwrap().to_scalar::<i64>().unwrap() as usize;
     let max_col: usize = *outputs.get(1).unwrap().to_scalar::<i64>().unwrap() as usize;
     let value: f32 = *outputs.get(2).unwrap().to_scalar().unwrap();
-    dbg!(&max_row);
-    dbg!(&max_col);
-    dbg!(&value);
+    // dbg!(&max_row);
+    // dbg!(&max_col);
+    // dbg!(&value);
 
     (max_row, max_col, value)
 }

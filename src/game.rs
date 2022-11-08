@@ -166,12 +166,13 @@ pub fn random_against_mcts() {
     let mut random_wins = 0;
     let mut draws = 0;
     for i in 0..n_games {
-        let mut board = Board::new(3, 3);
+        println!("{}", i);
+        let mut board = Board::new(10, 5);
 
         while !board.is_game_over() {
             let action: Action;
             if board.turn == mcts_player {
-                let mut mcts = MCTS::new(&board, 1_600);
+                let mut mcts = MCTS::new(&board, 800);
                 action = mcts.get_best_action();
             } else {
                 action = get_random_action(&board.legal_actions());
@@ -248,8 +249,7 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
     .unwrap();
 }
 
-pub fn self_play() {
-    let n_games: usize = 10_000;
+pub fn self_play(n_games: usize) {
     let size: usize = 10;
     let n_in_a_row: usize = 5;
     let n_mcts_simulations = 800;
