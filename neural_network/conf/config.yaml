@@ -1,0 +1,65 @@
+defaults:
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
+
+lit_model:
+  _target_: src.lit_model.LitModel
+
+  models_config:
+    model:
+      _target_: src.utils.models.Model
+
+  optimizer_config:
+    _target_: torch.optim.Adam
+    lr: 5e-4
+
+  scheduler_config: null
+  # scheduler_config:
+  #   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  #   T_max: ${trainer.max_epochs}
+
+  use_weights_path: null
+  # use_weights_path: TEST-Gomokrust/3ir6s38c/checkpoints/epoch=5-step=2000.ckpt
+
+
+callbacks:
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    save_last: True
+    monitor: train_loss
+    verbose: True
+
+
+logger:
+  _target_: pytorch_lightning.loggers.wandb.WandbLogger
+  project: TEST-Gomokrust
+
+
+datamodule:
+  _target_: src.utils.data.DataModule
+  batch_size: 2048
+  shuffle: True
+  num_workers: 8
+
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  deterministic: true
+  accelerator: gpu
+  devices: [0]
+  max_steps: 2_000
+  precision: 16
+
+
+# Restart training from checkpoint from PyTorch Lightning
+ckpt_path: null
+
+# Reproducibility
+seed: 123

@@ -249,7 +249,7 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
 }
 
 pub fn self_play() {
-    let n_games: usize = 9000;
+    let n_games: usize = 10_000;
     let size: usize = 10;
     let n_in_a_row: usize = 5;
     let n_mcts_simulations = 800;
