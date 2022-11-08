@@ -1,9 +1,9 @@
 use indexmap::IndexSet;
 use rand::Rng;
 
-extern crate tract_core;
-extern crate tract_onnx;
-use tract_onnx::prelude::*;
+// extern crate tract_core;
+// extern crate tract_onnx;
+// use tract_onnx::prelude::*;
 
 extern crate tch;
 
@@ -19,38 +19,52 @@ pub fn get_random_action(legal_moves: &IndexSet<Action>) -> Action {
         .expect("The random index should be in the IndexSet.")
 }
 
-pub fn get_onnx_policy_value(board: &Board) -> (usize, usize, f32) {
-    let model = tract_onnx::onnx()
-        .model_for_path("test.onnx")
-        .expect("Should be able to load the model.")
-        .into_runnable()
-        .expect("Should be able to run the model.");
+// pub fn get_onnx_policy_value(board: &Board) -> (usize, usize, f32) {
+//     let model = tract_onnx::onnx()
+//         .model_for_path("test.onnx")
+//         .expect("Should be able to load the model.")
+//         .into_runnable()
+//         .expect("Should be able to run the model.");
 
-    let board_repr = board
-        .to_repr()
-        .into_iter()
-        .flat_map(|s| s.into_iter().flatten().collect::<Vec<_>>())
-        .collect::<Vec<_>>();
-    let state_array = Array::from(board_repr).into_shape((1, 3, 10, 10)).unwrap();
+//     let board_repr = board
+//         .to_repr()
+//         .into_iter()
+//         .flat_map(|s| s.into_iter().flatten().collect::<Vec<_>>())
+//         .collect::<Vec<_>>();
+//     let state_array = Array::from(board_repr).into_shape((1, 3, 10, 10)).unwrap();
 
-    let state_tensor = Tensor::from(state_array);
-    let inputs = tvec!(state_tensor);
-    let outputs = model.run(inputs).unwrap();
+//     let state_tensor = Tensor::from(state_array);
+//     let inputs = tvec!(state_tensor);
+//     let outputs = model.run(inputs).unwrap();
 
-    let max_row: usize = *outputs.get(0).unwrap().to_scalar::<i64>().unwrap() as usize;
-    let max_col: usize = *outputs.get(1).unwrap().to_scalar::<i64>().unwrap() as usize;
-    let value: f32 = *outputs.get(2).unwrap().to_scalar().unwrap();
-    // dbg!(&max_row);
-    // dbg!(&max_col);
-    // dbg!(&value);
+//     let max_row: usize = *outputs.get(0).unwrap().to_scalar::<i64>().unwrap() as usize;
+//     let max_col: usize = *outputs.get(1).unwrap().to_scalar::<i64>().unwrap() as usize;
+//     let value: f32 = *outputs.get(2).unwrap().to_scalar().unwrap();
+//     // dbg!(&max_row);
+//     // dbg!(&max_col);
+//     // dbg!(&value);
 
-    (max_row, max_col, value)
+//     (max_row, max_col, value)
+// }
+
+pub fn get_torchjit_model() -> tch::CModule {
+    tch::CModule::load("model.pt")
+        // tch::CModule::load_on_device("model.pt", tch::Device::Cuda(0))
+        .expect("Should be able to load the model")
 }
 
-pub fn get_torchjit_policy_value(board: &Board) {
-    let model = tch::CModule::load("model.pt").expect("Should be able to load the model");
-    let x = tch::Tensor::zeros(&[7], tch::kind::FLOAT_CPU);
-    let output = model.forward_ts(&[x]);
+pub fn get_torchjit_policy_value(
+    model: &tch::CModule,
+    board_tensor: &tch::Tensor,
+) -> (Vec<f32>, f32) {
+    let outputs = model
+        .forward_ts(&[board_tensor])
+        .expect("Should return a tensor");
 
-    dbg!(&output);
+    let outputs: Vec<f32> = outputs.get(0).into();
+
+    let policies = outputs[0..outputs.len() - 1].to_vec();
+    let value = outputs[outputs.len() - 1];
+
+    (policies, value)
 }

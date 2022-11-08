@@ -28,7 +28,7 @@ def parse_game_data_from_json():
     policies = torch.FloatTensor(policies)
     values = torch.FloatTensor(values).unsqueeze(1)
 
-    torch.save((states, policies, values), "data.pt")
+    torch.save((states, policies, values), "flat_data.pt")
 
     print(states.shape)
     print(policies.shape)
@@ -46,8 +46,8 @@ class DataModule(pl.LightningDataModule):
         self.num_workers = num_workers
 
     def setup(self, stage=None):
-        if os.path.exists("data.pt"):
-            states, policies, values = torch.load("data.pt")
+        if os.path.exists("flat_data.pt"):
+            states, policies, values = torch.load("flat_data.pt")
         else:
             states, policies, values = parse_game_data_from_json()
 

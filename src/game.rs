@@ -12,7 +12,7 @@ use rayon::prelude::*;
 
 use crate::board::{show, Action, Board, Outcome, Player};
 use crate::mcts::MCTS;
-use crate::utils::get_random_action;
+use crate::utils::{get_random_action, get_torchjit_model};
 
 pub fn play_game() {
     let mut board = Board::new(3, 3);
@@ -140,83 +140,84 @@ pub fn get_player_action(board: &Board) -> Action {
     }
 }
 
-pub fn play_game_against_mcts() {
-    let mut board = Board::new(3, 3);
-    show(&board);
+// pub fn play_game_against_mcts() {
+//     let mut board = Board::new(3, 3);
+//     show(&board);
 
-    while !board.is_game_over() {
-        let action: Action;
-        if board.turn == Player::Black {
-            action = get_player_action(&mut board);
-        } else {
-            let mut mcts = MCTS::new(&board, 1_600);
-            action = mcts.get_best_action();
-        }
-        board.make_action(action).ok();
-        show(&board);
-    }
+//     while !board.is_game_over() {
+//         let action: Action;
+//         if board.turn == Player::Black {
+//             action = get_player_action(&mut board);
+//         } else {
+//             let mut mcts = MCTS::new(&board, 1_600);
+//             action = mcts.get_best_action();
+//         }
+//         board.make_action(action).ok();
+//         show(&board);
+//     }
 
-    dbg!(&board.outcome);
-}
+//     dbg!(&board.outcome);
+// }
 
-pub fn random_against_mcts() {
-    let n_games = 100;
-    let mcts_player = Player::White;
-    let mut mcts_wins = 0;
-    let mut random_wins = 0;
-    let mut draws = 0;
-    for i in 0..n_games {
-        println!("{}", i);
-        let mut board = Board::new(10, 5);
+// pub fn random_against_mcts() {
+//     let n_games = 100;
+//     let mcts_player = Player::White;
+//     let mut mcts_wins = 0;
+//     let mut random_wins = 0;
+//     let mut draws = 0;
+//     for i in 0..n_games {
+//         println!("{}", i);
+//         let mut board = Board::new(10, 5);
 
-        while !board.is_game_over() {
-            let action: Action;
-            if board.turn == mcts_player {
-                let mut mcts = MCTS::new(&board, 800);
-                action = mcts.get_best_action();
-            } else {
-                action = get_random_action(&board.legal_actions());
-            }
-            board.make_action(action).ok();
-        }
+//         while !board.is_game_over() {
+//             let action: Action;
+//             if board.turn == mcts_player {
+//                 let mut mcts = MCTS::new(&board, 800);
+//                 action = mcts.get_best_action();
+//             } else {
+//                 action = get_random_action(&board.legal_actions());
+//             }
+//             board.make_action(action).ok();
+//         }
 
-        match board.outcome {
-            Some(outcome) => match outcome {
-                Outcome::Winner(winner) => {
-                    if winner == mcts_player {
-                        mcts_wins += 1;
-                    } else {
-                        random_wins += 1;
-                    }
-                }
-                Outcome::Draw => draws += 1,
-            },
-            None => panic!("The game has ended and should have an outcome."),
-        }
-    }
-    println!(
-        "MCTS wins: {:.1}%",
-        mcts_wins as f32 / n_games as f32 * 100.0
-    );
-    println!(
-        "Random wins: {:.1}%",
-        random_wins as f32 / n_games as f32 * 100.0
-    );
-    println!("Draws: {:.1}%", draws as f32 / n_games as f32 * 100.0);
-}
+//         match board.outcome {
+//             Some(outcome) => match outcome {
+//                 Outcome::Winner(winner) => {
+//                     if winner == mcts_player {
+//                         mcts_wins += 1;
+//                     } else {
+//                         random_wins += 1;
+//                     }
+//                 }
+//                 Outcome::Draw => draws += 1,
+//             },
+//             None => panic!("The game has ended and should have an outcome."),
+//         }
+//     }
+//     println!(
+//         "MCTS wins: {:.1}%",
+//         mcts_wins as f32 / n_games as f32 * 100.0
+//     );
+//     println!(
+//         "Random wins: {:.1}%",
+//         random_wins as f32 / n_games as f32 * 100.0
+//     );
+//     println!("Draws: {:.1}%", draws as f32 / n_games as f32 * 100.0);
+// }
 
 pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations: usize) {
+    let model = get_torchjit_model();
     let mut board = Board::new(size, n_in_a_row);
 
     let mut policies = Vec::new();
-    let mut board_reprs = Vec::new();
+    let mut board_vecs = Vec::new();
 
     while !board.is_game_over() {
         let mut mcts = MCTS::new(&board, n_mcts_simulations);
-        let action = mcts.get_best_action();
+        let action = mcts.get_best_action(&model);
 
-        policies.push(mcts.get_policy());
-        board_reprs.push(board.to_repr());
+        policies.push(mcts.get_flat_policy());
+        board_vecs.push(board.to_flat_vec());
 
         board.make_action(action).ok();
     }
@@ -235,9 +236,9 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
 
     // JSON
     let mut game_json: Vec<Value> = vec![];
-    for (board_repr, policy) in board_reprs.iter().zip(policies.iter()) {
+    for (board_vec, policy) in board_vecs.iter().zip(policies.iter()) {
         game_json.push(json!({
-            "state": board_repr,
+            "state": board_vec,
             "policy": policy,
             "value": value
         }));

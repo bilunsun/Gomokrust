@@ -20,7 +20,8 @@ class LitModel(pl.LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
-        self.example_input_array = torch.zeros(1, 3, 10, 10)
+        self.example_input_array = torch.zeros(1, 101)
+        # self.example_input_array = torch.zeros(1, 3, 10, 10)
 
         # Instantiate a model with random weights, or load them from a checkpoint
         if self.hparams.use_weights_path is None:
@@ -41,19 +42,17 @@ class LitModel(pl.LightningModule):
             else None
         )
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        policies, values = self.model(x)
-        max_indices = (policies == torch.max(policies)).nonzero().squeeze(0)
-        return max_indices[2], max_indices[3], values[0][0]
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
 
     def training_step(self, batch, _) -> torch.Tensor:
         states, policies, values = batch
 
-        policies_pred, values_pred = self.model(states)
+        preds = self.model(states)
+        policies_pred = preds[:, :-1]
+        values_pred = preds[:, -1].unsqueeze(1)
 
         batch_size = policies.size(0)
-        policies_pred = policies_pred.reshape(batch_size, -1)
-        policies = policies.reshape(batch_size, -1)
 
         policy_loss = F.cross_entropy(policies_pred, policies)
         value_loss = F.mse_loss(values, values_pred)
@@ -65,12 +64,16 @@ class LitModel(pl.LightningModule):
 
         return train_loss
 
+    def save_torchscript(self):
+        self.eval()
+
+        traced_script_module = torch.jit.trace(self.model, self.example_input_array.to(self.device)).to("cpu")
+        traced_script_module.save("model.pt")
+
     def on_train_end(self):
         self.to_onnx("test.onnx")
 
-        self.model.eval()
-        traced_script_module = torch.jit.trace(self.model, self.example_input_array.to(self.device))
-        traced_script_module.save("model.pt")
+        self.save_torchscript()
 
     def configure_optimizers(self):
         if self.scheduler is None:

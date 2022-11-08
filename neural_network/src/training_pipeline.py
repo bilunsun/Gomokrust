@@ -19,6 +19,10 @@ def train(config: DictConfig) -> None:
     log.info("Creating LitModel.")
     model: pl.LightningModule = hydra.utils.instantiate(config.lit_model, _recursive_=False)
 
+    if config.instantiate_only:
+        model.save_torchscript()
+        return
+
     # Callbacks
     callbacks = []
     if config.get("callbacks"):

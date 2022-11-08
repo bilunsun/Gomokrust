@@ -2,23 +2,58 @@ import torch
 from torch import nn
 
 
+class FlatModel(nn.Module):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.backbone = nn.Sequential(
+            nn.Linear(101, 128),
+            nn.SiLU(inplace=True),
+            nn.Linear(128, 128),
+            nn.SiLU(inplace=True),
+        )
+
+        self.policy = nn.Sequential(
+            nn.Linear(128, 128),
+            nn.SiLU(inplace=True),
+            nn.Linear(128, 100)
+        )
+
+        self.value = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.SiLU(inplace=True),
+            nn.Linear(64, 1),
+            nn.Tanh()
+        )
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        x = self.backbone(x)
+
+        policy = self.policy(x)
+        value = self.value(x)
+
+        return torch.cat((policy, value), dim=1)
+
+
 class Model(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
 
         self.backbone = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, padding=2),
+            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3),
             nn.SiLU(inplace=True),
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=5, padding=2),
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3),
             nn.SiLU(inplace=True),
         )
         self.flat_shape = self.get_flat_shape()
+        print("self.flat_shape", self.flat_shape)
 
         self.policy = nn.Sequential(
-            nn.Conv2d(in_channels=128, out_channels=64, kernel_size=5, padding=2),
+            nn.Linear(self.flat_shape, 256),
             nn.SiLU(inplace=True),
-            nn.Conv2d(in_channels=64, out_channels=1, kernel_size=5, padding=2),
+            nn.Linear(256, 100)
         )
 
         self.value = nn.Sequential(
@@ -30,9 +65,10 @@ class Model(nn.Module):
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.backbone(x)
-        policy = self.policy(x)
 
         x = x.reshape(-1, self.flat_shape)
+
+        policy = self.policy(x).reshape(-1, 1, 10, 10)
         value = self.value(x)
 
         return policy, value

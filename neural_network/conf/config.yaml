@@ -14,7 +14,7 @@ lit_model:
 
   models_config:
     model:
-      _target_: src.utils.models.Model
+      _target_: src.utils.models.FlatModel
 
   optimizer_config:
     _target_: torch.optim.Adam
@@ -55,6 +55,7 @@ trainer:
   accelerator: gpu
   devices: [0]
   max_steps: 2_000
+  # max_steps: 10
   precision: 16
 
 
@@ -63,3 +64,6 @@ ckpt_path: null
 
 # Reproducibility
 seed: 123
+
+# Instantiate model without training
+instantiate_only: False

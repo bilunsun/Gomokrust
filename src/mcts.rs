@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use tch;
+
 use crate::board::{Action, Board, Outcome, Player};
-use crate::utils::{get_onnx_policy_value, get_random_action};
+use crate::utils::{get_random_action, get_torchjit_model, get_torchjit_policy_value};
 
 const SQRT_TWO: f32 = 1.41421356237;
 
@@ -26,13 +28,15 @@ pub struct Node {
     value: f32,
     visit_count: usize,
     turn: Player,
+    board_tensor: tch::Tensor,
 }
 
 impl Node {
-    pub fn new(action: Option<Action>, turn: Player) -> Self {
+    pub fn new(action: Option<Action>, turn: Player, board_tensor: tch::Tensor) -> Self {
         Node {
             action,
             turn,
+            board_tensor,
             children: Vec::new(),
             value: 0.0,
             visit_count: 0,
@@ -97,7 +101,7 @@ impl Node {
         // Create a child node for all untried moves
         let legal_actions = board.legal_actions();
         for action in legal_actions {
-            let child = Node::new(Some(*action), self.turn.opposite());
+            let child = Node::new(Some(*action), self.turn.opposite(), board.to_flat_tensor());
             self.children.push(child);
         }
 
@@ -113,7 +117,7 @@ pub struct MCTS {
 
 impl MCTS {
     pub fn new(board: &Board, n_iterations: usize) -> Self {
-        let root = Node::new(None, board.turn);
+        let root = Node::new(None, board.turn, board.to_flat_tensor());
         let board = board.clone();
         Self {
             root,
@@ -122,7 +126,7 @@ impl MCTS {
         }
     }
 
-    pub fn iteration(&mut self, board: &mut Board) {
+    pub fn iteration(&mut self, board: &mut Board, model: &tch::CModule) {
         let mut parents_pointers: Vec<*mut Node> = Vec::new();
 
         // Selection
@@ -136,7 +140,7 @@ impl MCTS {
         // Expansion
         let value = match node.expand(board) {
             Some(_) => {
-                let (max_row_, max_col, value) = get_onnx_policy_value(board); // Rollout
+                let (policies, value) = get_torchjit_policy_value(&model, &node.board_tensor); // Rollout
                 value
             }
             None => {
@@ -160,10 +164,10 @@ impl MCTS {
         }
     }
 
-    pub fn get_best_action(&mut self) -> Action {
+    pub fn get_best_action(&mut self, model: &tch::CModule) -> Action {
         for i in 0..self.n_iterations {
             let mut board = self.board.clone();
-            self.iteration(&mut board);
+            self.iteration(&mut board, &model);
         }
 
         let best_child = self
@@ -184,68 +188,78 @@ impl MCTS {
 
         policy
     }
-}
+    pub fn get_flat_policy(&self) -> Vec<f32> {
+        let mut flat_policy = vec![0f32; self.board.size * self.board.size];
 
-pub fn test_mcts_black_wins() {
-    /*
-        3 X O X
-        2 O X .
-        1 O . .
-          A B C
-    */
-    let mut board = Board::new(3, 3);
+        for child in &self.root.children {
+            let [row_index, col_index] = child.action.expect("Child nodes should have an action.");
+            let p = child.visit_count as f32 / self.n_iterations as f32;
+            flat_policy[row_index * self.board.size + col_index] = p;
+        }
 
-    for move_string in vec!["B2", "A2", "C3", "A1", "A3", "B3"].iter() {
-        let action = board
-            .parse_string_to_action(&String::from(*move_string))
-            .unwrap();
-        board.make_action(action).ok();
+        flat_policy
     }
-
-    let mut mcts = MCTS::new(&board, 1_000);
-    let best_action = mcts.get_best_action();
-
-    dbg!(&best_action);
-
-    // assert!(best_action == 18);
 }
 
-pub fn test_mcts_white_wins() {
-    /*
-       3 . . .
-       2 X O .
-       1 X O X
-         A B C
-    */
+// pub fn test_mcts_black_wins() {
+//     /*
+//         3 X O X
+//         2 O X .
+//         1 O . .
+//           A B C
+//     */
+//     let mut board = Board::new(3, 3);
 
-    let mut board = Board::new(3, 3);
+//     for move_string in vec!["B2", "A2", "C3", "A1", "A3", "B3"].iter() {
+//         let action = board
+//             .parse_string_to_action(&String::from(*move_string))
+//             .unwrap();
+//         board.make_action(action).ok();
+//     }
 
-    for move_string in vec!["A1", "B1", "A2", "B2", "C1"].iter() {
-        let action = board
-            .parse_string_to_action(&String::from(*move_string))
-            .unwrap();
-        board.make_action(action).ok();
-    }
+//     let mut mcts = MCTS::new(&board, 1_000);
+//     let best_action = mcts.get_best_action();
 
-    let mut mcts = MCTS::new(&board, 1_000);
-    let best_action = mcts.get_best_action();
+//     dbg!(&best_action);
 
-    dbg!(&best_action);
-    // assert!(best_action == 31);
-}
+//     // assert!(best_action == 18);
+// }
 
-pub fn benchmark() {
-    let n_iterations = 1_600;
-    let board = Board::new(15, 5);
-    let mut mcts = MCTS::new(&board, n_iterations);
-    let now = Instant::now();
+// pub fn test_mcts_white_wins() {
+//     /*
+//        3 . . .
+//        2 X O .
+//        1 X O X
+//          A B C
+//     */
+//     let mut board = Board::new(3, 3);
 
-    mcts.get_best_action();
+//     for move_string in vec!["A1", "B1", "A2", "B2", "C1"].iter() {
+//         let action = board
+//             .parse_string_to_action(&String::from(*move_string))
+//             .unwrap();
+//         board.make_action(action).ok();
+//     }
 
-    let elapsed_s = now.elapsed().as_secs_f32();
-    println!(
-        "Iterations per second: {}",
-        (n_iterations as f32 / elapsed_s) as usize
-    );
-    println!("{} seconds per {} iterations", elapsed_s, n_iterations);
-}
+//     let mut mcts = MCTS::new(&board, 1_000);
+//     let best_action = mcts.get_best_action();
+
+//     dbg!(&best_action);
+//     // assert!(best_action == 31);
+// }
+
+// pub fn benchmark() {
+//     let n_iterations = 1_600;
+//     let board = Board::new(15, 5);
+//     let mut mcts = MCTS::new(&board, n_iterations);
+//     let now = Instant::now();
+
+//     mcts.get_best_action();
+
+//     let elapsed_s = now.elapsed().as_secs_f32();
+//     println!(
+//         "Iterations per second: {}",
+//         (n_iterations as f32 / elapsed_s) as usize
+//     );
+//     println!("{} seconds per {} iterations", elapsed_s, n_iterations);
+// }

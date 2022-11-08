@@ -20,7 +20,8 @@ fn main() {
     // println!("Random vs Random");
     // game::random_against_random();
 
-    // game::self_play(10);
-    let board = board::Board::new(10, 5);
-    utils::get_torchjit_policy_value(&board);
+    game::self_play(100);
+    // let board = board::Board::new(10, 5);
+    // let model = utils::get_torchjit_model();
+    // utils::get_torchjit_policy_value(&model, &board);
 }
