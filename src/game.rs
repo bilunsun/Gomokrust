@@ -253,7 +253,7 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
 pub fn self_play(n_games: usize) {
     let size: usize = 10;
     let n_in_a_row: usize = 5;
-    let n_mcts_simulations = 800;
+    let n_mcts_simulations = 400;
 
     let total_elapsed_s: f32 = (0..n_games)
         .collect::<Vec<usize>>()
@@ -262,13 +262,13 @@ pub fn self_play(n_games: usize) {
             let now = Instant::now();
             self_play_single_game(size, n_in_a_row, n_mcts_simulations);
             let elapsed_s = now.elapsed().as_secs_f32();
-            println!("Games per second: {}", 1.0 / elapsed_s);
+            println!("Seconds per game: {}", elapsed_s);
             elapsed_s
         })
         .sum();
 
     println!(
-        "Total games per second: {}",
-        n_games as f32 / total_elapsed_s
+        "Average seconds per game: {}",
+        total_elapsed_s / n_games as f32
     )
 }

@@ -174,6 +174,7 @@ impl MCTS {
             .root
             .get_best_child()
             .expect("Root node should have children.");
+
         best_child.action.expect("Child should have action")
     }
 
