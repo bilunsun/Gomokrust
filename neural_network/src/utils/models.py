@@ -4,37 +4,31 @@ from torch import nn
 
 class FlatModel(nn.Module):
 
-    def __init__(self) -> None:
+    def __init__(self, size: int) -> None:
         super().__init__()
 
+        self.size = size
+
         self.backbone = nn.Sequential(
-            nn.Linear(101, 128),
+            nn.Linear(size**2 + 1, 128),
             nn.SiLU(inplace=True),
             nn.Linear(128, 128),
             nn.SiLU(inplace=True),
         )
 
-        self.policy = nn.Sequential(
+        self.policy_value = nn.Sequential(
             nn.Linear(128, 128),
             nn.SiLU(inplace=True),
-            nn.Linear(128, 100)
-        )
-
-        self.value = nn.Sequential(
-            nn.Linear(128, 64),
-            nn.SiLU(inplace=True),
-            nn.Linear(64, 1),
-            nn.Tanh()
+            nn.Linear(128, size**2 + 1)
         )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.backbone(x)
+        x = self.policy_value(x)
+        return x
 
-        policy = self.policy(x)
-        value = self.value(x)
-
-        return torch.cat((policy, value), dim=1)
-
+    def get_example_input_array(self) -> torch.Tensor:
+        return torch.zeros(1, self.size**2 + 1)
 
 class Model(nn.Module):
 

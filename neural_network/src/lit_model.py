@@ -16,12 +16,11 @@ class LitModel(pl.LightningModule):
         optimizer_config: DictConfig,
         scheduler_config: DictConfig,
         use_weights_path: str,
+        board_size: int,
     ) -> None:
         super().__init__()
 
         self.save_hyperparameters()
-        self.example_input_array = torch.zeros(1, 101)
-        # self.example_input_array = torch.zeros(1, 3, 10, 10)
 
         # Instantiate a model with random weights, or load them from a checkpoint
         if self.hparams.use_weights_path is None:
@@ -41,6 +40,8 @@ class LitModel(pl.LightningModule):
             if self.hparams.scheduler_config is not None
             else None
         )
+
+        self.example_input_array = self.model.get_example_input_array()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)

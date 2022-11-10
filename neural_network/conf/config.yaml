@@ -8,13 +8,15 @@ hydra:
   run:
     dir: .
 
-
 lit_model:
   _target_: src.lit_model.LitModel
+
+  board_size: 5
 
   models_config:
     model:
       _target_: src.utils.models.FlatModel
+      size: ${lit_model.board_size}
 
   optimizer_config:
     _target_: torch.optim.Adam

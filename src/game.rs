@@ -220,7 +220,9 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
         board_vecs.push(board.to_flat_vec());
 
         board.make_action(action).ok();
+        show(&board);
     }
+    println!("Num moves: {}", board.num_stones_placed);
 
     // Create values
     let value = match board
@@ -251,9 +253,9 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
 }
 
 pub fn self_play(n_games: usize) {
-    let size: usize = 10;
+    let size: usize = 5;
     let n_in_a_row: usize = 5;
-    let n_mcts_simulations = 400;
+    let n_mcts_simulations = 200;
 
     let total_elapsed_s: f32 = (0..n_games)
         .collect::<Vec<usize>>()

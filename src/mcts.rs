@@ -3,10 +3,12 @@ use std::time::Instant;
 
 use tch;
 
-use crate::board::{Action, Board, Outcome, Player};
+use crate::board::{show, Action, Board, Outcome, Player};
 use crate::utils::{get_random_action, get_torchjit_model, get_torchjit_policy_value};
 
 const SQRT_TWO: f32 = 1.41421356237;
+const PB_C_BASE: usize = 19652;
+const PB_C_INIT: f32 = 1.25;
 
 pub fn rollout(board: &mut Board) -> Outcome {
     while !board.is_game_over() {
@@ -25,41 +27,46 @@ pub fn rollout(board: &mut Board) -> Outcome {
 pub struct Node {
     action: Option<Action>,
     children: Vec<Node>,
-    value: f32,
+    total_value: f32,
+    prior: f32,
     visit_count: usize,
     turn: Player,
-    board_tensor: tch::Tensor,
 }
 
 impl Node {
-    pub fn new(action: Option<Action>, turn: Player, board_tensor: tch::Tensor) -> Self {
+    pub fn new(action: Option<Action>, turn: Player, prior: f32) -> Self {
         Node {
             action,
             turn,
-            board_tensor,
+            prior,
             children: Vec::new(),
-            value: 0.0,
+            total_value: 0.0,
             visit_count: 0,
         }
     }
 
-    pub fn uct(&self, parent_visit_count: usize) -> f32 {
+    pub fn value(&self) -> f32 {
         if self.visit_count == 0 {
-            return f32::INFINITY;
+            return 0.0;
         }
-        let exploitation_term = self.value / (self.visit_count as f32);
-        let exploration_term =
-            SQRT_TWO * f32::sqrt(f32::ln(parent_visit_count as f32) / (self.visit_count as f32));
-        exploitation_term + exploration_term
+
+        self.total_value / self.visit_count as f32
+    }
+
+    pub fn ucb(&self, parent_visit_count: usize) -> f32 {
+        let mut pb_c = f32::log10((parent_visit_count + PB_C_BASE + 1) as f32);
+        pb_c *= f32::sqrt(parent_visit_count as f32) / (1 + self.visit_count) as f32;
+
+        pb_c * self.prior as f32 + self.value()
     }
 
     pub fn update_with_outcome(&mut self, outcome: Outcome) {
         match outcome {
             Outcome::Winner(winner) => {
                 if winner != self.turn {
-                    self.value += 1.0
+                    self.total_value += 1.0
                 } else {
-                    self.value -= 1.0;
+                    self.total_value -= 1.0;
                 }
             }
             _ => (),
@@ -71,8 +78,8 @@ impl Node {
     /// The output of the neural network is always from Black's perspective
     pub fn update(&mut self, value: f32) {
         match self.turn {
-            Player::White => self.value += value,
-            Player::Black => self.value -= value,
+            Player::White => self.total_value += value,
+            Player::Black => self.total_value -= value,
         }
 
         self.visit_count += 1;
@@ -83,7 +90,7 @@ impl Node {
         let mut best_child: Option<&mut Node> = None;
 
         for child in &mut self.children {
-            let child_score = child.uct(self.visit_count);
+            let child_score = child.ucb(self.visit_count);
             if child_score > best_score {
                 best_score = child_score;
                 best_child = Some(child);
@@ -101,11 +108,15 @@ impl Node {
         // Create a child node for all untried moves
         let legal_actions = board.legal_actions();
         for action in legal_actions {
-            let child = Node::new(Some(*action), self.turn.opposite(), board.to_flat_tensor());
+            let child = Node::new(Some(*action), self.turn.opposite(), 0.0);
             self.children.push(child);
         }
 
         Some(&mut self.children[0])
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        self.children.is_empty()
     }
 }
 
@@ -117,7 +128,7 @@ pub struct MCTS {
 
 impl MCTS {
     pub fn new(board: &Board, n_iterations: usize) -> Self {
-        let root = Node::new(None, board.turn, board.to_flat_tensor());
+        let root = Node::new(None, board.turn, 0.0);
         let board = board.clone();
         Self {
             root,
@@ -131,33 +142,43 @@ impl MCTS {
 
         // Selection
         let mut node = &mut self.root;
-        while !node.children.is_empty() {
-            parents_pointers.push(node);
+        parents_pointers.push(node);
+
+        while !node.is_leaf() {
             node = node.get_best_child().unwrap();
             board.make_action(node.action.unwrap()).ok();
+            parents_pointers.push(node);
         }
 
         // Expansion
-        let value = match node.expand(board) {
-            Some(_) => {
-                let (policies, value) = get_torchjit_policy_value(&model, &node.board_tensor); // Rollout
-                value
-            }
-            None => {
-                let outcome = board
-                    .outcome
-                    .expect("Terminal state should have an outcome.");
+        let (policies, value) = get_torchjit_policy_value(&model, &board.to_flat_tensor());
+        let legal_actions = board.legal_actions();
+        for &action in legal_actions {
+            let prior = policies[board.action_to_flat_index(&action)];
+            let child = Node::new(Some(action), node.turn.opposite(), prior);
+            node.children.push(child);
+        }
 
-                match outcome {
-                    Outcome::Winner(Player::Black) => 1.0,
-                    Outcome::Winner(Player::White) => -1.0,
-                    Outcome::Draw => 0.0,
-                }
-            }
-        };
+        // Expansion and "rollout"
+        // let value = match node.expand(board) {
+        //     Some(_) => {
+        //         let (policies, value) = get_torchjit_policy_value(&model, &board.to_tensor()); // Rollout
+        //         value
+        //     }
+        //     None => {
+        //         let outcome = board
+        //             .outcome
+        //             .expect("Terminal state should have an outcome.");
+
+        //         match outcome {
+        //             Outcome::Winner(Player::Black) => 1.0,
+        //             Outcome::Winner(Player::White) => -1.0,
+        //             Outcome::Draw => 0.0,
+        //         }
+        //     }
+        // };
 
         // Backpropagate
-        node.update(value);
         for parent_pointer in parents_pointers.iter().rev() {
             let parent = unsafe { parent_pointer.as_mut().unwrap() };
             parent.update(value);
@@ -189,6 +210,7 @@ impl MCTS {
 
         policy
     }
+
     pub fn get_flat_policy(&self) -> Vec<f32> {
         let mut flat_policy = vec![0f32; self.board.size * self.board.size];
 
@@ -202,65 +224,67 @@ impl MCTS {
     }
 }
 
-// pub fn test_mcts_black_wins() {
-//     /*
-//         3 X O X
-//         2 O X .
-//         1 O . .
-//           A B C
-//     */
-//     let mut board = Board::new(3, 3);
+pub fn test_mcts_black_wins() {
+    /*
+        3 X O X
+        2 O X .
+        1 O . .
+          A B C
+    */
+    let model = get_torchjit_model();
+    let mut board = Board::new(3, 3);
 
-//     for move_string in vec!["B2", "A2", "C3", "A1", "A3", "B3"].iter() {
-//         let action = board
-//             .parse_string_to_action(&String::from(*move_string))
-//             .unwrap();
-//         board.make_action(action).ok();
-//     }
+    for move_string in vec!["B2", "A2", "C3", "A1", "A3", "B3"].iter() {
+        let action = board
+            .parse_string_to_action(&String::from(*move_string))
+            .unwrap();
+        board.make_action(action).ok();
+    }
 
-//     let mut mcts = MCTS::new(&board, 1_000);
-//     let best_action = mcts.get_best_action();
+    let mut mcts = MCTS::new(&board, 1_000);
+    let best_action = mcts.get_best_action(&model);
 
-//     dbg!(&best_action);
+    show(&board);
+    dbg!(&best_action);
+}
 
-//     // assert!(best_action == 18);
-// }
+pub fn test_mcts_white_wins() {
+    /*
+       3 . . .
+       2 X O .
+       1 X O X
+         A B C
+    */
+    let mut board = Board::new(3, 3);
+    let model = get_torchjit_model();
 
-// pub fn test_mcts_white_wins() {
-//     /*
-//        3 . . .
-//        2 X O .
-//        1 X O X
-//          A B C
-//     */
-//     let mut board = Board::new(3, 3);
+    for move_string in vec!["A1", "B1", "A2", "B2", "C1"].iter() {
+        let action = board
+            .parse_string_to_action(&String::from(*move_string))
+            .unwrap();
+        board.make_action(action).ok();
+    }
 
-//     for move_string in vec!["A1", "B1", "A2", "B2", "C1"].iter() {
-//         let action = board
-//             .parse_string_to_action(&String::from(*move_string))
-//             .unwrap();
-//         board.make_action(action).ok();
-//     }
+    let mut mcts = MCTS::new(&board, 1_000);
+    let best_action = mcts.get_best_action(&model);
 
-//     let mut mcts = MCTS::new(&board, 1_000);
-//     let best_action = mcts.get_best_action();
+    show(&board);
+    dbg!(&best_action);
+}
 
-//     dbg!(&best_action);
-//     // assert!(best_action == 31);
-// }
+pub fn benchmark() {
+    let n_iterations = 400;
+    let board = Board::new(3, 3);
+    let model = get_torchjit_model();
+    let mut mcts = MCTS::new(&board, n_iterations);
+    let now = Instant::now();
 
-// pub fn benchmark() {
-//     let n_iterations = 1_600;
-//     let board = Board::new(15, 5);
-//     let mut mcts = MCTS::new(&board, n_iterations);
-//     let now = Instant::now();
+    mcts.get_best_action(&model);
 
-//     mcts.get_best_action();
-
-//     let elapsed_s = now.elapsed().as_secs_f32();
-//     println!(
-//         "Iterations per second: {}",
-//         (n_iterations as f32 / elapsed_s) as usize
-//     );
-//     println!("{} seconds per {} iterations", elapsed_s, n_iterations);
-// }
+    let elapsed_s = now.elapsed().as_secs_f32();
+    println!(
+        "Iterations per second: {}",
+        (n_iterations as f32 / elapsed_s) as usize
+    );
+    println!("{} seconds per {} iterations", elapsed_s, n_iterations);
+}

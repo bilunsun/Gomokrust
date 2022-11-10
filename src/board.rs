@@ -251,6 +251,11 @@ impl Board {
         ] as BaseBoardLocation
     }
 
+    /// Converts an Action to a flat index
+    pub fn action_to_flat_index(&self, action: &Action) -> usize {
+        action[0] * self.size + action[1]
+    }
+
     /// Converts a BaseBoardLocation to an Action
     fn base_board_location_to_action(&self, base_board_location: BaseBoardLocation) -> Action {
         [
