@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::time::Instant;
 
 use tch;
@@ -60,21 +59,6 @@ impl Node {
         pb_c * self.prior as f32 + self.value()
     }
 
-    pub fn update_with_outcome(&mut self, outcome: Outcome) {
-        match outcome {
-            Outcome::Winner(winner) => {
-                if winner != self.turn {
-                    self.total_value += 1.0
-                } else {
-                    self.total_value -= 1.0;
-                }
-            }
-            _ => (),
-        };
-
-        self.visit_count += 1;
-    }
-
     /// The output of the neural network is always from Black's perspective
     pub fn update(&mut self, value: f32) {
         match self.turn {
@@ -98,21 +82,6 @@ impl Node {
         }
 
         best_child
-    }
-
-    pub fn expand(&mut self, board: &Board) -> Option<&mut Node> {
-        if board.is_game_over() {
-            return None;
-        }
-
-        // Create a child node for all untried moves
-        let legal_actions = board.legal_actions();
-        for action in legal_actions {
-            let child = Node::new(Some(*action), self.turn.opposite(), 0.0);
-            self.children.push(child);
-        }
-
-        Some(&mut self.children[0])
     }
 
     pub fn is_leaf(&self) -> bool {
