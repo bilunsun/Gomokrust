@@ -15,8 +15,8 @@ pub fn get_random_action(legal_moves: &IndexSet<Action>) -> Action {
         .expect("The random index should be in the IndexSet.")
 }
 
-pub fn get_torchjit_model() -> tch::CModule {
-    tch::CModule::load("model.pt").expect("Should be able to load the model")
+pub fn get_torchjit_model(path: &str) -> tch::CModule {
+    tch::CModule::load(path).expect("Should be able to load the model")
 }
 
 pub fn get_torchjit_policy_value(
@@ -45,8 +45,8 @@ pub fn softmax(logits: Vec<f32>) -> Vec<f32> {
     softmax
 }
 
-pub fn sample_from_policies(policies: Vec<f32>) -> usize {
-    let dist = WeightedIndex::new(&policies).unwrap();
+pub fn sample_from_weights(weights: &Vec<f32>) -> usize {
+    let dist = WeightedIndex::new(weights).unwrap();
     let mut rng = thread_rng();
     dist.sample(&mut rng)
 }

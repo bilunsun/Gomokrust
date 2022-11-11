@@ -140,24 +140,25 @@ pub fn get_player_action(board: &Board) -> Action {
     }
 }
 
-// pub fn play_game_against_mcts() {
-//     let mut board = Board::new(3, 3);
-//     show(&board);
+pub fn play_game_against_mcts() {
+    let model = get_torchjit_model("old.pt");
+    let mut board = Board::new(3, 3);
+    show(&board);
 
-//     while !board.is_game_over() {
-//         let action: Action;
-//         if board.turn == Player::Black {
-//             action = get_player_action(&mut board);
-//         } else {
-//             let mut mcts = MCTS::new(&board, 1_600);
-//             action = mcts.get_best_action();
-//         }
-//         board.make_action(action).ok();
-//         show(&board);
-//     }
+    while !board.is_game_over() {
+        let action: Action;
+        if board.turn == Player::White {
+            action = get_player_action(&mut board);
+        } else {
+            let mut mcts = MCTS::new(&board, 1600);
+            action = mcts.get_best_action(&model, false);
+        }
+        board.make_action(action).ok();
+        show(&board);
+    }
 
-//     dbg!(&board.outcome);
-// }
+    dbg!(&board.outcome);
+}
 
 // pub fn random_against_mcts() {
 //     let n_games = 100;
@@ -206,7 +207,7 @@ pub fn get_player_action(board: &Board) -> Action {
 // }
 
 pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations: usize) {
-    let model = get_torchjit_model();
+    let model = get_torchjit_model("test.pt");
     let mut board = Board::new(size, n_in_a_row);
 
     let mut policies = Vec::new();
@@ -214,15 +215,15 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
 
     while !board.is_game_over() {
         let mut mcts = MCTS::new(&board, n_mcts_simulations);
-        let action = mcts.get_best_action(&model);
+        let action = mcts.get_best_action(&model, true);
 
         policies.push(mcts.get_flat_policy());
         board_vecs.push(board.to_flat_vec());
 
         board.make_action(action).ok();
-        show(&board);
+        // show(&board);
     }
-    println!("Num moves: {}", board.num_stones_placed);
+    // println!("Num moves: {}", board.num_stones_placed);
 
     // Create values
     let value = match board
@@ -253,14 +254,14 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
 }
 
 pub fn self_play(n_games: usize) {
-    let size: usize = 5;
+    let size: usize = 8;
     let n_in_a_row: usize = 5;
     let n_mcts_simulations = 200;
 
     let total_elapsed_s: f32 = (0..n_games)
         .collect::<Vec<usize>>()
         .par_iter()
-        .map(|_| {
+        .map(|i| {
             let now = Instant::now();
             self_play_single_game(size, n_in_a_row, n_mcts_simulations);
             let elapsed_s = now.elapsed().as_secs_f32();
@@ -273,4 +274,64 @@ pub fn self_play(n_games: usize) {
         "Average seconds per game: {}",
         total_elapsed_s / n_games as f32
     )
+}
+
+pub fn ai_vs_ai_single(
+    size: usize,
+    n_in_a_row: usize,
+    n_mcts_simulations: usize,
+    new_player: Player,
+) -> Outcome {
+    let old_model = get_torchjit_model("old.pt");
+    let new_model = get_torchjit_model("new.pt");
+    let mut board = Board::new(size, n_in_a_row);
+
+    while !board.is_game_over() {
+        let mut mcts = MCTS::new(&board, n_mcts_simulations);
+
+        let action = if board.turn == new_player {
+            mcts.get_best_action(&new_model, false)
+        } else {
+            mcts.get_best_action(&old_model, false)
+        };
+
+        board.make_action(action).ok();
+    }
+
+    board.outcome.expect("Game over should have an outcome.")
+}
+
+pub fn ai_vs_ai(size: usize, n_in_a_row: usize, n_mcts_simulations: usize) {
+    let n_games = 400;
+
+    let new_wins: Vec<f32> = (0..n_games)
+        .collect::<Vec<usize>>()
+        .par_iter()
+        .map(|i| {
+            let new_player = if i % 2 == 0 {
+                Player::Black
+            } else {
+                Player::White
+            };
+            let outcome = ai_vs_ai_single(size, n_in_a_row, n_mcts_simulations, new_player);
+
+            if let Outcome::Winner(winner) = outcome {
+                if winner == new_player {
+                    1.0
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let n_games_played = new_wins.len(); // Sometimes par_iter gives less than n_games?
+    let new_wins_ratio: f32 = new_wins.iter().sum::<f32>() / n_games_played as f32;
+
+    // println!("Old wins: {}", old_wins);
+    // println!("New wins: {}", new_wins);
+    // println!("Draws: {}", draws);
+    println!("New wins ratio: {}", new_wins_ratio);
 }

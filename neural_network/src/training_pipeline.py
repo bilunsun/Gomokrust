@@ -20,7 +20,7 @@ def train(config: DictConfig) -> None:
     model: pl.LightningModule = hydra.utils.instantiate(config.lit_model, _recursive_=False)
 
     if config.instantiate_only:
-        model.save_torchscript()
+        model.save_torchscript("old.pt")
         return
 
     # Callbacks

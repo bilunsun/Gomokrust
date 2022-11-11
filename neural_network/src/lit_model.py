@@ -57,24 +57,47 @@ class LitModel(pl.LightningModule):
 
         policy_loss = F.cross_entropy(policies_pred, policies)
         value_loss = F.mse_loss(values, values_pred)
-        train_loss = policy_loss + value_loss
+        loss = policy_loss + value_loss
 
-        self.log("policy_loss", policy_loss, prog_bar=True, logger=True)
-        self.log("value_loss", value_loss, prog_bar=True, logger=True)
-        self.log("train_loss", train_loss, prog_bar=True, logger=True)
+        self.log("train_policy_loss", policy_loss, prog_bar=True, logger=True)
+        self.log("train_value_loss", value_loss, prog_bar=True, logger=True)
+        self.log("train_loss", loss, prog_bar=True, logger=True)
 
-        return train_loss
+        return loss
 
-    def save_torchscript(self):
+    def validation_step(self, batch, _) -> torch.Tensor:
+        states, policies, values = batch
+
+        preds = self.model(states)
+        policies_pred = preds[:, :-1]
+        values_pred = preds[:, -1].unsqueeze(1)
+
+        batch_size = policies.size(0)
+
+        policy_loss = F.cross_entropy(policies_pred, policies)
+        value_loss = F.mse_loss(values, values_pred)
+        loss = policy_loss + value_loss
+
+        self.log("val_policy_loss", policy_loss, prog_bar=True, logger=True)
+        self.log("val_value_loss", value_loss, prog_bar=True, logger=True)
+        self.log("val_loss", loss, prog_bar=True, logger=True)
+
+    def on_save_checkpoint(self, checkpoint) -> None:
+        self.save_torchscript("test_conv.pt")
+
+    def save_torchscript(self, path: str):
         self.eval()
 
-        traced_script_module = torch.jit.trace(self.model, self.example_input_array.to(self.device)).to("cpu")
-        traced_script_module.save("model.pt")
+        traced_script_module = torch.jit.trace(self.model.to("cpu"), self.example_input_array.to("cpu"))
+        traced_script_module.save(path)
+
+        self.train()
+        self.model.to(self.device)
 
     def on_train_end(self):
         self.to_onnx("test.onnx")
 
-        self.save_torchscript()
+        self.save_torchscript("test.pt")
 
     def configure_optimizers(self):
         if self.scheduler is None:

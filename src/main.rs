@@ -3,6 +3,9 @@ mod game;
 mod mcts;
 mod utils;
 
+use rand::prelude::*;
+use rand_distr::Dirichlet;
+
 use std::time::Instant;
 
 fn main() {
@@ -12,7 +15,7 @@ fn main() {
     // mcts::test_mcts_black_wins();
     // mcts::test_mcts_white_wins();
     // mcts::benchmark();
-    // // game::play_game_against_mcts();
+    game::play_game_against_mcts();
 
     // println!("Random vs MCTS");
     // game::random_against_mcts();
@@ -24,7 +27,10 @@ fn main() {
 
     // game::self_play_single_game(5, 5, 400);
     // let now = Instant::now();
-    game::self_play(2500);
+    // game::self_play(5_000);
+
+    // game::ai_vs_ai(8, 5, 200);
+
     // let elapsed = now.elapsed().as_secs_f32();
     // println!("TOTAL {}s", elapsed);
     // let board = board::Board::new(10, 5);
@@ -34,4 +40,8 @@ fn main() {
     // let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
     // let policies = utils::softmax(values);
     // dbg!(&policies);
+
+    // let dirichlet = Dirichlet::new(&vec![0.03; 10]).unwrap();
+    // let samples = dirichlet.sample(&mut rand::thread_rng());
+    // dbg!(&samples);
 }
