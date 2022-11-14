@@ -150,7 +150,7 @@ pub fn play_game_against_mcts() {
         if board.turn == Player::White {
             action = get_player_action(&mut board);
         } else {
-            let mut mcts = MCTS::new(&board, 1600);
+            let mut mcts = MCTS::new(&board, 400);
             action = mcts.get_best_action(&model, false);
         }
         board.make_action(action).ok();
@@ -221,9 +221,7 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
         board_vecs.push(board.to_flat_vec());
 
         board.make_action(action).ok();
-        // show(&board);
     }
-    // println!("Num moves: {}", board.num_stones_placed);
 
     // Create values
     let value = match board
@@ -256,7 +254,7 @@ pub fn self_play_single_game(size: usize, n_in_a_row: usize, n_mcts_simulations:
 pub fn self_play(n_games: usize) {
     let size: usize = 8;
     let n_in_a_row: usize = 5;
-    let n_mcts_simulations = 200;
+    let n_mcts_simulations = 400;
 
     let total_elapsed_s: f32 = (0..n_games)
         .collect::<Vec<usize>>()

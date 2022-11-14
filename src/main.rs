@@ -13,9 +13,10 @@ fn main() {
     // game::benchmark();
     // // game::play_game();
     // mcts::test_mcts_black_wins();
+    // mcts::test_basics();
     // mcts::test_mcts_white_wins();
     // mcts::benchmark();
-    game::play_game_against_mcts();
+    // game::play_game_against_mcts();
 
     // println!("Random vs MCTS");
     // game::random_against_mcts();
@@ -27,9 +28,9 @@ fn main() {
 
     // game::self_play_single_game(5, 5, 400);
     // let now = Instant::now();
-    // game::self_play(5_000);
+    game::self_play(5_000);
 
-    // game::ai_vs_ai(8, 5, 200);
+    // game::ai_vs_ai(8, 5, 100);
 
     // let elapsed = now.elapsed().as_secs_f32();
     // println!("TOTAL {}s", elapsed);

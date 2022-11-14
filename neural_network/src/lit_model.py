@@ -83,7 +83,7 @@ class LitModel(pl.LightningModule):
         self.log("val_loss", loss, prog_bar=True, logger=True)
 
     def on_save_checkpoint(self, checkpoint) -> None:
-        self.save_torchscript("test_conv.pt")
+        self.save_torchscript("new.pt")
 
     def save_torchscript(self, path: str):
         self.eval()
@@ -97,7 +97,7 @@ class LitModel(pl.LightningModule):
     def on_train_end(self):
         self.to_onnx("test.onnx")
 
-        self.save_torchscript("test.pt")
+        self.save_torchscript("new.pt")
 
     def configure_optimizers(self):
         if self.scheduler is None:

@@ -129,6 +129,10 @@ impl Board {
     }
 
     pub fn make_action(&mut self, action: Action) -> Result<Action, ()> {
+        if self.is_game_over() {
+            panic!("Cannot make action as the game is already over.");
+        }
+
         let base_board_location = self.action_to_base_board_location(action);
         // Cannot place a stone on an occupied square
         if self.base_board.is_occupied(base_board_location) {
@@ -144,10 +148,7 @@ impl Board {
         // If no winner nor draw, switch the turn.
         self.outcome = self.check_outcome(action);
         if self.outcome.is_none() {
-            match self.turn {
-                Player::Black => self.turn = Player::White,
-                Player::White => self.turn = Player::Black,
-            }
+            self.turn = self.turn.opposite();
         }
 
         Ok(action)
@@ -483,6 +484,7 @@ pub fn show(board: &Board) {
 
     let padded_row_names: Vec<String> = row_names
         .iter()
+        .rev()
         .map(|n| {
             let mut padded_name = String::from(if n.len() == 1 { " " } else { "" });
             padded_name.push_str(n);
