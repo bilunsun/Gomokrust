@@ -1,17 +1,11 @@
 use indexmap::IndexSet;
+use rand::distributions::WeightedIndex;
+use rand::prelude::*;
 use rand::Rng;
 
-extern crate serde_json;
-use serde_json::{json, Value};
+extern crate tch;
 
-extern crate ndarray;
-use ndarray::prelude::*;
-
-extern crate itertools;
-use itertools::izip;
-
-use crate::board::{Action, Board};
-use crate::mcts::MCTS;
+use crate::board::Action;
 
 pub fn get_random_action(legal_moves: &IndexSet<Action>) -> Action {
     let random_index = rand::thread_rng().gen_range(0..legal_moves.len());
@@ -21,23 +15,38 @@ pub fn get_random_action(legal_moves: &IndexSet<Action>) -> Action {
         .expect("The random index should be in the IndexSet.")
 }
 
-// pub fn game_to_json(
-//     policies: Vec<Vec<f32>>,
-//     value: f32,
-//     actions: Vec<Action>,
-//     board: &mut Board,
-// ) -> Value {
-//     board.reset();
+pub fn get_torchjit_model(path: &str) -> tch::CModule {
+    tch::CModule::load(path).expect("Should be able to load the model")
+}
 
-//     // for
-//     let board_repr = board.to_repr();
+pub fn get_torchjit_policy_value(
+    model: &tch::CModule,
+    board_tensor: &tch::Tensor,
+) -> (Vec<f32>, f32) {
+    let outputs = model
+        .forward_ts(&[board_tensor])
+        .expect("Should return a tensor");
 
-//     let json_data = json!({
-//         "value": 1.0,
-//         "policy": [1, 2, 3],
-//         "state": board_repr,
-//     });
+    let outputs: Vec<f32> = outputs.get(0).into();
 
-//     println!("{}", json_data);
-//     json_data
-// }
+    let policy_logits = outputs[0..outputs.len() - 1].to_vec();
+    let policies = softmax(policy_logits);
+    let value = outputs[outputs.len() - 1];
+
+    (policies, value)
+}
+
+pub fn softmax(logits: Vec<f32>) -> Vec<f32> {
+    let max = logits.iter().fold(f32::NEG_INFINITY, |m, v| m.max(*v));
+    let numerator: Vec<f32> = logits.iter().map(|v| (v - max).exp()).collect();
+    let denominator: f32 = numerator.iter().sum();
+    let softmax = numerator.iter().map(|v| v / denominator).collect();
+
+    softmax
+}
+
+pub fn sample_from_weights(weights: &Vec<f32>) -> usize {
+    let dist = WeightedIndex::new(weights).unwrap();
+    let mut rng = thread_rng();
+    dist.sample(&mut rng)
+}

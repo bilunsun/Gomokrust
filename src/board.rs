@@ -26,6 +26,13 @@ impl Player {
             Player::Black => true,
         }
     }
+
+    pub fn to_f32(&self) -> f32 {
+        match self {
+            Player::Black => 1.0,
+            Player::White => 0.0,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -122,6 +129,10 @@ impl Board {
     }
 
     pub fn make_action(&mut self, action: Action) -> Result<Action, ()> {
+        if self.is_game_over() {
+            panic!("Cannot make action as the game is already over.");
+        }
+
         let base_board_location = self.action_to_base_board_location(action);
         // Cannot place a stone on an occupied square
         if self.base_board.is_occupied(base_board_location) {
@@ -137,10 +148,7 @@ impl Board {
         // If no winner nor draw, switch the turn.
         self.outcome = self.check_outcome(action);
         if self.outcome.is_none() {
-            match self.turn {
-                Player::Black => self.turn = Player::White,
-                Player::White => self.turn = Player::Black,
-            }
+            self.turn = self.turn.opposite();
         }
 
         Ok(action)
@@ -244,6 +252,11 @@ impl Board {
         ] as BaseBoardLocation
     }
 
+    /// Converts an Action to a flat index
+    pub fn action_to_flat_index(&self, action: &Action) -> usize {
+        action[0] * self.size + action[1]
+    }
+
     /// Converts a BaseBoardLocation to an Action
     fn base_board_location_to_action(&self, base_board_location: BaseBoardLocation) -> Action {
         [
@@ -324,30 +337,104 @@ impl Board {
         }
     }
 
-    pub fn to_repr(&self) -> Vec<Vec<Vec<bool>>> {
+    pub fn to_vec(&self) -> Vec<Vec<Vec<f32>>> {
         let board_slice = self.base_board.data.slice(s![
             self.n_in_a_row - 1..self.size + self.base_board_padding(),
             self.n_in_a_row - 1..self.size + self.base_board_padding()
         ]);
 
-        let mut game_board = vec![vec![vec![false; self.size]; self.size]; 2];
+        let mut board_vec = vec![vec![vec![0f32; self.size]; self.size]; 2];
 
         // Set the pieces
         for ((row_index, col_index), square_state) in board_slice.indexed_iter() {
             match square_state {
                 SquareState::Occupied(turn) => match turn {
-                    Player::Black => game_board[0][row_index][col_index] = true,
-                    Player::White => game_board[1][row_index][col_index] = true,
+                    Player::Black => board_vec[0][row_index][col_index] = 1.0,
+                    Player::White => board_vec[1][row_index][col_index] = 1.0,
                 },
                 _ => (),
             }
         }
 
         // Set the turn
-        let turn_plane = vec![vec![self.turn.to_bool(); self.size]; self.size];
-        game_board.push(turn_plane);
+        let turn_plane = vec![vec![self.turn.to_f32(); self.size]; self.size];
+        board_vec.push(turn_plane);
 
-        game_board
+        board_vec
+    }
+
+    pub fn to_array(&self) -> Array3<f32> {
+        let board_slice = self.base_board.data.slice(s![
+            self.n_in_a_row - 1..self.size + self.base_board_padding(),
+            self.n_in_a_row - 1..self.size + self.base_board_padding()
+        ]);
+
+        let mut board_array = Array3::<f32>::zeros((3, self.size, self.size));
+
+        // Set the pieces
+        for ((row_index, col_index), square_state) in board_slice.indexed_iter() {
+            match square_state {
+                SquareState::Occupied(turn) => match turn {
+                    Player::Black => board_array[[0, row_index, col_index]] = 1.0,
+                    Player::White => board_array[[1, row_index, col_index]] = 1.0,
+                },
+                _ => (),
+            }
+        }
+
+        // Set the turn
+        board_array
+            .slice_mut(s![2, .., ..])
+            .fill(self.turn.to_f32());
+
+        board_array
+    }
+
+    pub fn to_flat_array(&self) -> Array1<f32> {
+        let board_slice = self.base_board.data.slice(s![
+            self.n_in_a_row - 1..self.size + self.base_board_padding(),
+            self.n_in_a_row - 1..self.size + self.base_board_padding()
+        ]);
+
+        let mut board_flat_array = Array1::<f32>::zeros(self.size * self.size + 1);
+
+        // Set the pieces
+        for ((row_index, col_index), square_state) in board_slice.indexed_iter() {
+            let index = row_index * self.size + col_index;
+            match square_state {
+                SquareState::Occupied(player) => board_flat_array[index] = player.to_f32(),
+                _ => (),
+            }
+        }
+
+        board_flat_array[self.size * self.size] = self.turn.to_f32();
+
+        board_flat_array
+    }
+
+    pub fn to_flat_vec(&self) -> Vec<f32> {
+        let board_flat_array = self.to_flat_array();
+        board_flat_array.iter().map(|i| *i).collect()
+    }
+
+    pub fn to_tensor(&self) -> tch::Tensor {
+        let board_array = self.to_array();
+        let board_tensor = tch::Tensor::try_from(board_array)
+            .unwrap()
+            // .to_device(tch::Device::Cuda(0))
+            .reshape(&[1, 3, self.size as i64, self.size as i64]);
+
+        board_tensor
+    }
+
+    pub fn to_flat_tensor(&self) -> tch::Tensor {
+        let board_flat_array = self.to_flat_array();
+        let board_tensor = tch::Tensor::try_from(board_flat_array)
+            .unwrap()
+            // .to_device(tch::Device::Cuda(0))
+            .reshape(&[1, (self.size * self.size + 1) as i64]);
+
+        board_tensor
     }
 }
 
@@ -397,6 +484,7 @@ pub fn show(board: &Board) {
 
     let padded_row_names: Vec<String> = row_names
         .iter()
+        .rev()
         .map(|n| {
             let mut padded_name = String::from(if n.len() == 1 { " " } else { "" });
             padded_name.push_str(n);
